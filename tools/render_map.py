@@ -226,7 +226,10 @@ def main():
         Image.fromarray(img).resize((1024, 1024), Image.LANCZOS).save(args.preview, "JPEG", quality=85, optimize=True)
     if args.out:
         assert args.size == WORLD, "tiles need the full 10240 render"
-        sea = tuple(int(v) for v in data["baseGradient"][0])
+        # The average sea at the world's edge fills partial tiles and is the page background
+        # (maps.json "background"), so the map has no visible edge.
+        border = np.concatenate([img[:, :64].reshape(-1, 3), img[:, -64:].reshape(-1, 3)])
+        sea = tuple(int(round(v)) for v in border.mean(axis=0))
         n, total = write_tiles(img, args.out, range(-5, 1), sea)
         print("%d tiles, %.1f MB in %s; background %s" % (n, total / 2 ** 20, args.out, "#%02x%02x%02x" % sea))
 

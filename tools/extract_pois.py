@@ -19,10 +19,15 @@ import sys
 
 # Map marker types of build 25988414 (keen::ecs::MapMarker.markerType), named from the
 # templates that use them. Order = order in the page's marker panel.
+# Fast travel: only marker types the game's MapMarkerRegistryResource marks as fast travel
+# destinations with an icon (checked 2026-10-22): 2bad3206 = the 8 Ancient Spires (tower icon),
+# 5ebdad4b = the 2 Ancient Lands fast travel points (fast travel icon). Flame Altars and the
+# home base are fast travel destinations too, but players build them, so they are not in the
+# world data. Not used: 77997dbc (teleport platforms, save points in Fallen Crypts and towers,
+# beacons, braziers; 168 entities) has no icon and is never shown on the game's map.
 MARKER_TYPES = {
     "2bad3206-cad7-469a-a358-64ea99181416": "spire",
-    "5ebdad4b-08b6-4578-8d63-fe9917449eaf": "spire",
-    "77997dbc-4c4c-4843-a616-107505e4512d": "fasttravel",
+    "5ebdad4b-08b6-4578-8d63-fe9917449eaf": "fasttravel",
     "d486f2ce-66a3-4ef4-86a4-bf2ea9a24373": "shrine",
     "8cc3aae1-5041-462d-a03d-bb81cef9c611": "well",
     "8e313547-131a-46fe-b430-c8d028d52573": "town",
@@ -97,6 +102,8 @@ NICE_LABELS = [
     (r"fogNest|fognest", "Shroud nest"),
     (r"ancient_obelisk|Obelisk", "Ancient obelisk"),
     (r"hiddenGrave", "Hidden grave"),
+    (r"MapMarker_Tower_AncientLands_FastTravel_\d+_gardenIsland", "Fast travel point (Ancient Lands, Garden Island)"),
+    (r"MapMarker_Tower_AncientLands_FastTravel_\d+_citadel", "Fast travel point (Ancient Lands, Citadel)"),
     (r"MapMarker_Tower_(\w+?)_FastTravel", r"Ancient Spire (\1)"),
     (r"enemyCamp", "Enemy camp"),
     (r"Town_Generic_abandoned", "Abandoned town"),

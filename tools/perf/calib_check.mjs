@@ -133,7 +133,7 @@ const tileState = await page.evaluate(() => {
 });
 check("game map: tiles shown", tileState.loaded >= 4 && tileHits >= 4 && tileMisses === 0,
   JSON.stringify(tileState) + " hits " + tileHits + " misses " + tileMisses);
-check("game map: sea colour behind the tiles", tileState.bg === "rgb(59, 42, 55)", tileState.bg);
+check("game map: sea colour behind the tiles", tileState.bg === "rgb(64, 45, 59)", tileState.bg);
 await page.click("#calibToggle");
 await page.waitForTimeout(300);
 await page.selectOption("#calibPlayer", "1");

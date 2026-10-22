@@ -1,3 +1,8 @@
+1.0.1
+- Fast travel points: only the real destinations, like on the game's own map. 1.0.0 also listed
+  141 teleport platforms the game never shows (save points inside Fallen Crypts and towers,
+  beacons, braziers). Now: 8 Ancient Spires and the 2 Ancient Lands fast travel points.
+
 1.0.0 (first release)
 - Live web map served by the dedicated server: players with names, positions and walking direction, in-game time, real time, weather zones.
 - The game's own map, rendered from the map data inside the game: 1 m per pixel when zoomed in, loaded as tiles.

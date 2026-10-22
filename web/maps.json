@@ -1,6 +1,6 @@
 {
   "worldSize": 10240,
   "maps": [
-    { "name": "Game map", "tiles": "tiles/{z}_{x}_{y}.jpg", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#3b2a37" }
+    { "name": "Game map", "tiles": "tiles/{z}_{x}_{y}.jpg", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#402d3b" }
   ]
 }

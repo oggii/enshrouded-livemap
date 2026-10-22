@@ -127,7 +127,8 @@ The server has the enum strings and the "ambient_effects" name, but not this sam
   49 marker TYPES (category, icon guid, fast travel flag), no positions. Localised names live in
   a compressed blob (LocaTagCollectionResource only references it), so labels come from the
   template names.
-- Result: web/pois.json, 3721 points in 28 categories, rebuilt with
+- Result: web/pois.json, 3721 points in 28 categories (3556 since 2026-10-22: fast travel
+  only from registry fast travel destinations, see MARKER_TYPES in tools/extract_pois.py), rebuilt with
   `python tools/extract_pois.py --server <u-clean dir> --out web/pois.json`.
 
 ## 10. Icons (2026-10-20)

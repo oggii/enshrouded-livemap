@@ -62,7 +62,7 @@ const exe = ["chrome-win64", "chrome-win"].map(s => path.join(root, dir, s, "chr
 const browser = await chromium.launch({ executablePath: exe });
 const pois = JSON.parse(fs.readFileSync(path.join(web, "pois.json"), "utf8"));
 const catIndex = Object.fromEntries(pois.categories.map((c, i) => [c.id, i]));
-const findPoi = (cat, re) => pois.pois.find(p => p[0] === catIndex[cat] && re.test(p[4]));
+const findPoi = (cat, re) => pois.pois.find(p => p[0] === catIndex[cat] && re.test(p[4] || pois.categories[p[0]].label_default));
 fs.mkdirSync(outDir, { recursive: true });
 
 // prefs: {category: shown}; view: [z, x, zoom]; then() runs in the page context before the shot
