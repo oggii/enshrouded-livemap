@@ -163,7 +163,8 @@ def chest_category(name):
     return cat, ", ".join(flags)
 
 
-def load_templates(server_dir):
+def load_templates(server_dir, names=None):
+    """names: optional (GameTexts, {marker type guid: type name}) for the game's own names."""
     templates = {}
     for path in glob.glob(os.path.join(server_dir, "TemplateResource", "*.json")):
         try:
@@ -183,6 +184,13 @@ def load_templates(server_dir):
         if cat == "questarea" and "noui" in name.lower():
             continue
         label = label_from(name) if marker else CATEGORIES[CAT_INDEX[cat]][1].rstrip("s").replace("Sarcophagi", "Sarcophagus")
+        if marker and names:
+            game_name = names[0].by_guid(marker.get("markerId"))
+            type_name = names[1].get(marker["markerType"])
+            if game_name and type_name and game_name != type_name:
+                label = type_name + " · " + game_name     # "Ancient Spire · Revelwood"
+            elif game_name or type_name:
+                label = game_name or type_name
         if flags:
             label += " (" + flags + ")"
         templates[d["$guid"]] = (cat, label, name)
@@ -221,8 +229,24 @@ def main():
     ap.add_argument("--server", required=True)
     ap.add_argument("--out")
     ap.add_argument("--survey", action="store_true")
+    ap.add_argument("--game", help="client folder, for the game's own names (with --loca and --registry)")
+    ap.add_argument("--loca", help="unpacked LocaTagCollectionResource json (client)")
+    ap.add_argument("--registry", help="unpacked MapMarkerRegistryResource json (client)")
+    ap.add_argument("--language", default="En_Us")
     a = ap.parse_args()
-    templates = load_templates(a.server)
+    names = None
+    if a.game and a.loca and a.registry:
+        from game_texts import GameTexts, guid_id
+        texts = GameTexts(a.game, a.loca, a.language)
+        registry = {v["markerId"]["value"]: v for v in json.load(open(a.registry, encoding="utf-8"))["mapMarkers"]["values"]}
+        type_names = {}
+        for g in MARKER_TYPES:
+            v = registry.get(guid_id(g))
+            if v and v.get("typeName"):
+                type_names[g] = texts.by_guid(v["typeName"])
+        names = (texts, type_names)
+        print(f"game texts: {len(texts.texts)} ({a.language}), type names {type_names}", file=sys.stderr)
+    templates = load_templates(a.server, names)
     instances = load_instances(a.server, templates)
     counts = collections.Counter(i[0] for i in instances)
     for cid, label, _, _ in CATEGORIES:
