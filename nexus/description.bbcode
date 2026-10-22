@@ -10,6 +10,7 @@ A live map of your server in the browser. Everyone with the link sees who is onl
 [*][b]Players live:[/b] names, positions and an arrow for the walking direction, updated four times a second.
 [*][b]Time and weather:[/b] in-game clock with day and night, real time, rain and snow zones drawn on the map.
 [*][b]All map markers from the game's own data:[/b] over 3,500 points in 28 categories with the game's icons, each category can be switched on and off: Ancient Spires and fast travel points (only the real destinations, as on the game's own map), Flame Shrines, Elixir Wells, towns, dungeons, Night Temples, caves, mines, Gem Forges, obelisks, hidden graves, Shroud nests, enemy camps, boss unlocks, gold, silver and wooden chests, sarcophagi, treasure fishing spots and more.
+[*][b]Your Flame Altars live:[/b] every altar the players built shows up on the map with the game's altar icon and the size of its build zone, straight from the server. Build a new one and it appears within seconds; take one down and it disappears. The game's own starting altar is there too.
 [*][b]Ore map that fills itself:[/b] when a player mines copper, iron, sulfur, flint, crystals or any of 21 deposit kinds, the vein appears on the map with its own icon, who found it and how often it was mined. Shared by everyone, saved across restarts.
 [*][b]Looted chests:[/b] a chest someone opened turns grey with a check mark (with name and date); one switch hides all looted chests.
 [*][b]The game's own map:[/b] drawn from the map data inside the game (height, relief, contour lines, Shroud zones), sharp down to 1 metre per pixel when you zoom in. Only the part you look at is loaded.
@@ -53,12 +54,13 @@ You find the full link in [i]livemap.log[/i] ("map link: ...") to post in your D
 [*][b]AnnounceInChat[/b] (1): the map link in the chat when a player joins.
 [*][b]Key[/b] (random): 3 to 64 letters, digits, - or _; upper and lower case do not matter.
 [*][b]Finds[/b] (1): ore deposits and looted chests.
+[*][b]Bases[/b] (1): the players' Flame Altars.
 [*][b]UpdateMs[/b] (250): how often the page gets new positions.
 [/list]
 
 [size=4][b]Good to know[/b][/size]
 [list]
-[*]Everyone with the link sees all player positions. Share it with your players only; change the key to lock old links out.
+[*]Everyone with the link sees all player positions and Flame Altars. Share it with your players only; change the key to lock old links out (or set Bases=0).
 [*]Without a proxy or tunnel the map is plain HTTP.
 [*]Links in the game chat cannot be clicked or copied: type the short link, or copy the full one from livemap.log.
 [*]The ore map only shows deposits someone has mined on your server; ore veins are part of the terrain and not in the game's marker data.

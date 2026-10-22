@@ -17,6 +17,7 @@ struct Config {
     bool log = true;
     bool log_diagnostics = true; // time and player positions every 30 s, new players' raw names
     bool finds = true;           // ore and chest hooks (Finds=0 turns them off)
+    bool bases = true;           // Flame Altars on the map (Bases=0 turns them off)
     bool chat_probe = false;     // research: after a join, post one chat line per message type
 };
 

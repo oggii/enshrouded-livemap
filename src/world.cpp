@@ -16,6 +16,7 @@
 #include "ecs.h"
 #include "log.h"
 #include "memory.h"
+#include "text.h"
 
 #include "items_generated.h"
 
@@ -57,7 +58,10 @@ SafetyHookMid g_daytime_hook;
 SafetyHookMid g_registry_hook;
 SafetyHookMid g_mining_hook;
 SafetyHookMid g_chest_hook;
+SafetyHookMid g_bases_hook;
 finds::Store g_finds;
+bases::Store g_bases;
+std::atomic<int> g_bases_logged{0};
 
 double meters(int64_t fixed);
 
@@ -324,6 +328,35 @@ void on_chest(SafetyHookContext& ctx) {
     g_finds.record_chest(x, y, z, -1, nearest_player(x, z, 12.0), unix_now(), rl);
 }
 
+// One base in add_buildzones_server's walk: [rbp-0x18] = BaseIdComponent (BaseId +0, wasAbandoned
+// +0x28), [rbp-0x10] = transform, [rbp-0x8] = the build zone (size float3 at +4; the system adds
+// a zone only when a side is above a minimum).
+void on_base(SafetyHookContext& ctx) {
+    uintptr_t component = 0, transform = 0, zone = 0;
+    uint64_t id_lo = 0, id_hi = 0;
+    uint32_t size[3] = {};
+    uint8_t abandoned = 0;
+    bases::Base b;
+    if (!read_ptr(ctx.rbp - 0x18, component) || !read_ptr(ctx.rbp - 0x10, transform) || !read_ptr(ctx.rbp - 0x8, zone) ||
+        component == 0 || !read_u64(component, id_lo) || !read_u64(component + 8, id_hi) ||
+        !read_u8(component + 0x28, abandoned) || !read_position(transform, b.x, b.y, b.z)) {
+        return;
+    }
+    if (zone == 0 || !read_u32(zone + 4, size[0]) || !read_u32(zone + 8, size[1]) || !read_u32(zone + 0xc, size[2])) {
+        size[0] = size[1] = size[2] = 0;  // no zone: size 0
+    }
+    std::memcpy(&b.size_x, &size[0], 4);
+    std::memcpy(&b.size_y, &size[1], 4);
+    std::memcpy(&b.size_z, &size[2], 4);
+    b.abandoned = abandoned != 0;
+    if (g_bases_logged.fetch_add(1, std::memory_order_relaxed) < 60) {
+        log("BASE id %016llx%016llx at %.2f %.2f %.2f zone %.1f x %.1f x %.1f%s", static_cast<unsigned long long>(id_hi),
+            static_cast<unsigned long long>(id_lo), b.x, b.y, b.z, b.size_x, b.size_y, b.size_z,
+            b.abandoned ? " abandoned" : "");
+    }
+    g_bases.see(id_lo, id_hi, b, GetTickCount64());
+}
+
 // Service registry entry: rdx = {const char* name, size_t length}, r8 = the service object.
 void on_registry(SafetyHookContext& ctx) {
     uintptr_t name_ptr = 0;
@@ -339,28 +372,21 @@ void on_registry(SafetyHookContext& ctx) {
     if (std::strcmp(name, "WeatherSystem") == 0) g_weather_system.store(ctx.r8, std::memory_order_relaxed);
 }
 
-// The name field's layout is not known yet: either an inline string or a pointer to one.
+// The name field is {char* data, u64 length, u64 capacity}, UTF-8 (raw slot dumps 2026-10-22:
+// "OG Vanilla K" = length 12 / capacity 16, a 19-byte name = 19 / 32). Until 1.0.1 the field
+// was first read as inline text, which turned a pointer without a zero byte early on into a
+// garbled name.
 std::string read_name(uintptr_t field) {
-    char inline_buf[33] = {};
-    bool printable = true;
-    for (int i = 0; i < 32; ++i) {
-        uint8_t c = 0;
-        if (!read_u8(field + i, c)) return {};
-        inline_buf[i] = static_cast<char>(c);
-        if (c == 0) break;
-        if (c < 0x20) printable = false;
-    }
-    if (printable && inline_buf[0] != 0) return inline_buf;
     uintptr_t ptr = 0;
-    if (!read_ptr(field, ptr) || ptr < 0x10000) return {};
-    std::string s;
-    for (int i = 0; i < 64; ++i) {
+    uint64_t length = 0;
+    if (!read_ptr(field, ptr) || !read_u64(field + 8, length) || ptr < 0x10000 || length == 0 || length > 128) return {};
+    std::string s(static_cast<size_t>(length), '\0');
+    for (size_t i = 0; i < s.size(); ++i) {
         uint8_t c = 0;
-        if (!read_u8(ptr + i, c) || c == 0) break;
-        if (c < 0x20) return {};
-        s += static_cast<char>(c);
+        if (!read_u8(ptr + i, c)) return {};
+        s[i] = static_cast<char>(c);
     }
-    return s;
+    return text::clean_utf8(s);
 }
 
 void log_raw_slot(int index, uintptr_t slot) {
@@ -468,6 +494,18 @@ void append_weather(std::string& out) {
 }  // namespace
 
 finds::Store& store() { return g_finds; }
+bases::Store& bases_store() { return g_bases; }
+
+void install_bases(const Targets& t) {
+    if (t.bases == 0) {
+        log("bases site not found: Flame Altars are off");
+        return;
+    }
+    auto h = safetyhook::MidHook::create(reinterpret_cast<void*>(t.bases), on_base);
+    if (!h) { log("could not hook bases: Flame Altars are off"); return; }
+    g_bases_hook = std::move(*h);
+    log("hooked %-12s at %llx", "bases", static_cast<unsigned long long>(t.bases));
+}
 
 void install_mining(const Targets& t) {
     if (t.mining == 0) {
@@ -610,7 +648,8 @@ std::string snapshot_json() {
     }
     out += "],\"weather\":";
     append_weather(out);
-    out += ",\"findsVersion\":" + std::to_string(g_finds.version()) + "}";
+    out += ",\"findsVersion\":" + std::to_string(g_finds.version());
+    out += ",\"basesVersion\":" + std::to_string(g_bases.version(GetTickCount64())) + "}";
     return out;
 }
 

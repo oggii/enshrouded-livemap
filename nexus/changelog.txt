@@ -1,3 +1,11 @@
+1.1.0
+- New: your Flame Altars on the map, live from the server, with the game's altar icon and the
+  size of the build zone. New altars appear within seconds, removed ones disappear. Bases=0 in
+  livemap.ini turns them off.
+- The game's starting Flame Altar (Awakening Chamber) is on the map again; 1.0.1 dropped it
+  together with the teleport platforms.
+- Fixed: player names with special characters showed as garbled symbols.
+
 1.0.1
 - Fast travel points: only the real destinations, like on the game's own map. 1.0.0 also listed
   141 teleport platforms the game never shows (save points inside Fallen Crypts and towers,

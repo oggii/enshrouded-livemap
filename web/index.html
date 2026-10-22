@@ -501,6 +501,20 @@
   // Finds (livemap/finds.json via /finds): ore deposits become categories "ore:<sort>" with a
   // pickaxe glyph, looted chests dim their POI and get a check mark. Rebuilt on every refresh.
   let findsData = null, findsVersion = -1, lootedByPoi = new Map();
+  // Flame Altars (player bases) from /bases: the first category, in its own panel group.
+  // Their points go after the pois.json ones, so finds keep pointing at the right chests.
+  let basesData = null, basesVersion = -1;
+  function applyBases(data, bases) {
+    if (!bases || !bases.bases || !bases.bases.length) return;
+    data.categories.unshift({ id: "altar", label: "Flame Altars", color: "#ffc04d", on: true, label_default: "Flame Altar" });
+    for (const p of data.pois) p[0] += 1;
+    for (const b of bases.bases) {
+      // size = half the side of the build zone box (the server adds it on both sides)
+      const zone = b.size && b.size[0] > 0 ? " · build zone " + Math.round(2 * b.size[0]) + " × " + Math.round(2 * b.size[2]) + " m" : "";
+      data.pois.push([0, b.x, b.y, b.z, "Flame Altar" + (b.abandoned ? " (abandoned)" : "") + zone, { base: true }]);
+    }
+  }
+
   function applyFinds(data, finds) {
     data.categories = data.categories.filter(c => !c.id.startsWith("ore:") && c.id !== "looted");
     data.pois = data.pois.filter(p => !p.isFind);
@@ -583,7 +597,7 @@
     list.innerHTML = "";
     let lastGroup = "";
     for (const c of data.categories) {
-      const group = c.id.startsWith("ore:") ? "Finds" : c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted" ? "Loot" : "Places";
+      const group = c.id === "altar" ? "Bases" : c.id.startsWith("ore:") ? "Finds" : c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted" ? "Loot" : "Places";
       if (group !== lastGroup) {
         const h = document.createElement("div"); h.className = "group"; h.textContent = group; list.appendChild(h);
         lastGroup = group;
@@ -622,6 +636,7 @@
   let rawPoiData = null;
   function rebuildPois() {
     const data = JSON.parse(JSON.stringify(rawPoiData));
+    applyBases(data, basesData);
     applyFinds(data, findsData);
     poiData = data;
     preparePois(data);
@@ -632,12 +647,15 @@
     fetchJsonRetry("pois.json" + q, null),
     fetchJsonRetry("icons/icons.json" + q, {}),
     fetch("finds" + q).then(r => r.ok ? r.json() : null).catch(() => null),
-  ]).then(([data, icons, finds]) => {
+    fetch("bases" + q).then(r => r.ok ? r.json() : null).catch(() => null),
+  ]).then(([data, icons, finds, bases]) => {
     if (!data) return;
     iconFiles = icons || {};
     rawPoiData = data;
     findsData = finds;
     findsVersion = finds ? finds.version : -1;
+    basesData = bases;
+    basesVersion = bases ? bases.version : -1;
     rebuildPois();
     poiLayer.addTo(map);
   });
@@ -648,6 +666,15 @@
     fetch("finds" + q).then(r => r.ok ? r.json() : null).then(finds => {
       if (finds) { findsData = finds; findsVersion = finds.version; rebuildPois(); }
     }).catch(() => {}).finally(() => { findsFetching = false; });
+  }
+
+  let basesFetching = false;
+  function maybeRefreshBases(version) {
+    if (version === undefined || version === basesVersion || basesFetching || !rawPoiData) return;
+    basesFetching = true;
+    fetch("bases" + q).then(r => r.ok ? r.json() : null).then(bases => {
+      if (bases) { basesData = bases; basesVersion = bases.version; rebuildPois(); }
+    }).catch(() => {}).finally(() => { basesFetching = false; });
   }
 
   function fmtGameTime(t) {
@@ -725,6 +752,7 @@
   function render(state) {
     lastState = state;
     maybeRefreshFinds(state.findsVersion);
+    maybeRefreshBases(state.basesVersion);
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     renderWeather(state.weather);
     const firstWithPos = state.players.find(p => p.pos);

@@ -78,7 +78,7 @@ stops the IP lookup entirely.
 
 ### Good to know
 
-- Everyone with the link sees all player positions. Share it with your players only; change
+- Everyone with the link sees all player positions and Flame Altars. Share it with your players only; change
   `Key=` to revoke it.
 - Without a proxy the map is plain HTTP.
 - Links in the game chat cannot be clicked: type them, or copy them from `livemap.log`.
@@ -96,6 +96,7 @@ stops the IP lookup entirely.
 | `Key` | random | Access key in the link: 3 to 64 letters, digits, `-` or `_`; case does not matter. |
 | `UpdateMs` | `250` | How often the page gets new positions (100 to 5000). |
 | `Finds` | `1` | Ore deposits and opened chests on the map. |
+| `Bases` | `1` | The players' Flame Altars on the map. |
 | `Log`, `LogDiagnostics` | `1` | Log file and periodic diagnostics. |
 
 ## The map

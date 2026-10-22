@@ -277,3 +277,30 @@ tools/extract_icons.py uses that mapping (checked 2026-10-22, 19 of 19 categorie
 fast travel has none there and gets mapmarker_fastTravel), crops each icon to its visible
 pixels and writes 72 px PNGs. The registry also says enemy camps are drawn larger
 (iconDisplaySize 100 instead of 70).
+
+## 14. Flame Altars (player bases) and player names (2026-10-22)
+
+- The server registers a service `PlayerBasesSystemServer`; altars carry `keen::ecs::BaseIdComponent`
+  (BaseId 16 bytes, wasAbandoned at +0x28). Found the altar data first with a read-only scan of
+  the test server's memory (3.7 GB of writable regions streamed to the host, numpy): the 7 altar
+  positions read off an in-game map screenshot (scale from two spires, 2.4 m per pixel) all sit
+  in one ECS chunk of 56-byte transforms (position 3 x int64 32.32, quaternion, scale), 10
+  entries = "ACTIVE ALTARS 10" in the game.
+- Code path: the ECS system `add_buildzones_server` (name in a .rdata system table:
+  {name ptr, length, function}) = FUN_1400e90e0 (25988414) / FUN_1400e9f90 (26083076). It runs
+  every tick, once per ECS chunk (8 + 2 altars = two calls, about 20 times a second), with an
+  iterator at [rbp-0x20]: [rbp-0x18] = BaseIdComponent, [rbp-0x10] = transform, [rbp-0x8] = build
+  zone (size float3 at +4, half the side: the zone box is position +- size). The DLL hooks the
+  loop head 0x100 bytes after the function start (pattern `bases`, unique in both builds).
+  Altars not seen for 10 s count as removed.
+- Checked on the test server: the hook reports the same 10 altars as the memory scan, to the
+  centimetre; build zones 40 x 40 m, the main base 80 x 80 m. On the web map every altar sits
+  within 2 to 4 px of the in-game map screenshot at the same scale.
+- The game's starting altar is not a player base: template
+  `Prop_NPC_Ancients_HolyFlame_01_Range_AwakeningChamber` at (3695.0, 902.0, 1213.5) with the
+  teleport platform marker type; tools/extract_pois.py puts it in its own category (spawn altar
+  icon). 1.0.1 had dropped it with the platforms.
+- Player names: the slot's name field is {char* data, u64 length, u64 capacity}, UTF-8 (raw
+  dumps: "OG Vanilla K" 12/16, a 19-byte name 19/32). 1.0.x read the field as inline text first;
+  a pointer without an early zero byte became a garbled name. Now pointer + length, cleaned to
+  valid UTF-8 (src/text.cpp, tests/text_test.cpp).

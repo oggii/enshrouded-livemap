@@ -160,6 +160,10 @@ void handle(SOCKET s) {
         send_response(s, "200 OK", "application/json", world::store().to_json());
         return;
     }
+    if (path == "/bases") {
+        send_response(s, "200 OK", "application/json", world::bases_store().to_json(GetTickCount64()));
+        return;
+    }
     if (path == "/events") {
         stream_events(s);
         return;

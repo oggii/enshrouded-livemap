@@ -1,8 +1,9 @@
-Enshrouded Live Map 1.0.1
+Enshrouded Live Map 1.1.0
 =========================
 
 Server-side mod for Enshrouded dedicated servers. The server serves a live web map: players
-with names and walking direction, in-game time, weather, the game's map markers, and the ore
+with names and walking direction, in-game time, weather, the game's map markers, the Flame
+Altars you built, and the ore
 veins and chests your group finds. Players install nothing; they open a link in the browser.
 
 Works with server builds 25988414 and 26083076 (Enshrouded 1.0, October 2026). On other
@@ -40,8 +41,10 @@ DetectPublicAddress=1  0 = never ask api.ipify.org for the public IP
 AnnounceInChat=1       the map link in the chat when a player joins
 Key=<random>           3 to 64 letters, digits, - or _; players can type <address>/<key>
 Finds=1                ore veins and looted chests on the map
+Bases=1                the players' Flame Altars on the map
 
-Everyone with the link sees all player positions. Change Key= to lock old links out.
+Everyone with the link sees all player positions and Flame Altars. Change Key= to lock old
+links out.
 
 CHECK
 livemap.log shows "map link: http://..." and, after a player joins, the chat shows

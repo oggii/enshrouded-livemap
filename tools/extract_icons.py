@@ -45,6 +45,8 @@ ICONS = {
     "camp": "mapmarker_survivorcamp",
     "farm": "mapmarker_farm",
     "questarea": "mapmarker_investigation",
+    "altar": "mapmarker_flame_altar",
+    "spawnaltar": "mapmarker_spawn_flame_altar",  # player-built, from the server's bases (not pois.json)
 }
 
 

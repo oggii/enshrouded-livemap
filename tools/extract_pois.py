@@ -55,6 +55,7 @@ CATEGORIES = [
     # id, label, colour, shown by default
     ("spire", "Ancient Spires", "#ffd36f", True),
     ("fasttravel", "Fast travel points", "#f2b766", True),
+    ("spawnaltar", "Starting Flame Altar", "#ffc04d", True),
     ("shrine", "Flame Shrines & Temples", "#ff9f6f", True),
     ("well", "Elixir Wells & Shroud Roots", "#c67cff", True),
     ("town", "Towns & ruins", "#ece6f5", True),
@@ -84,6 +85,8 @@ CATEGORIES = [
 ]
 CAT_INDEX = {c[0]: i for i, c in enumerate(CATEGORIES)}
 
+SPAWN_ALTAR = re.compile(r"^Prop_NPC_Ancients_HolyFlame_\d+_Range_AwakeningChamber$")
+
 # Readable names for the templates that occur most; everything else is derived from the name.
 NICE_LABELS = [
     (r"^Teleport_Platform_SavePoint_Tower", "Fast travel point (tower)"),
@@ -92,6 +95,7 @@ NICE_LABELS = [
     (r"^Prop_Ancient_Dungeon_Beacon", "Ancient dungeon beacon"),
     (r"^Prop_Tower_Beacon", "Tower beacon"),
     (r"DragonBrazier", "Dragon brazier"),
+    (r"HolyFlame_\d+_Range_AwakeningChamber", "Starting Flame Altar (Awakening Chamber)"),
     (r"FogWellPlant", "Shroud Root"),
     (r"ElixirWell", "Elixir Well"),
     (r"traversalCave|Cave_generic", "Cave"),
@@ -170,6 +174,10 @@ def load_templates(server_dir):
         comps = d.get("components") or []
         marker = next((c["$value"] for c in comps if c.get("$type") == "keen::ecs::MapMarker"), None)
         cat, flags = (MARKER_TYPES.get(marker["markerType"]), "") if marker else chest_category(name)
+        # The game's own first Flame Altar (Awakening Chamber): a fast travel destination with the
+        # spawn altar icon on the game's map, but its template carries the platform marker type.
+        if SPAWN_ALTAR.match(name):
+            cat = "spawnaltar"
         if cat is None:
             continue
         if cat == "questarea" and "noui" in name.lower():

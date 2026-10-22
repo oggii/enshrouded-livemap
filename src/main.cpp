@@ -103,6 +103,8 @@ DWORD WINAPI start(LPVOID) {
     } else {
         livemap::log("finds off in livemap.ini (Finds=0)");
     }
+    if (config.bases) livemap::world::install_bases(targets);
+    else livemap::log("Flame Altars off in livemap.ini (Bases=0)");
     if (config.chat_probe) livemap::world::enable_chat_probe(targets);
     const std::wstring finds_path = dir + L"\\livemap\\finds.json";
     if (FILE* f = _wfopen(finds_path.c_str(), L"rb")) {

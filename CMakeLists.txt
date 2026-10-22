@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(enshrouded_livemap VERSION 1.0.1 LANGUAGES CXX ASM_MASM)
+project(enshrouded_livemap VERSION 1.1.0 LANGUAGES CXX ASM_MASM)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(safetyhook)
 
-add_library(livemap_core STATIC src/scan.cpp src/finds.cpp src/link.cpp)
+add_library(livemap_core STATIC src/scan.cpp src/finds.cpp src/link.cpp src/text.cpp src/bases.cpp)
 target_include_directories(livemap_core PUBLIC src)
 
 # The DLL is named iphlpapi.dll because the server loads it in place of the real one.
@@ -46,6 +46,12 @@ add_test(NAME finds COMMAND finds_test)
 add_executable(link_test tests/link_test.cpp)
 target_link_libraries(link_test PRIVATE livemap_core)
 add_test(NAME link COMMAND link_test)
+add_executable(text_test tests/text_test.cpp)
+target_link_libraries(text_test PRIVATE livemap_core)
+add_test(NAME text COMMAND text_test)
+add_executable(bases_test tests/bases_test.cpp)
+target_link_libraries(bases_test PRIVATE livemap_core)
+add_test(NAME bases COMMAND bases_test)
 
 add_executable(livemap_selftest tools/selftest.cpp)
 target_link_libraries(livemap_selftest PRIVATE livemap_core)

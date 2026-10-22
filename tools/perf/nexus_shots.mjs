@@ -39,8 +39,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (u.pathname === "/state") { res.writeHead(200, { "Content-Type": "application/json" }); res.end(state()); return; }
-  if (u.pathname === "/finds") {
-    const r = await fetch(upstream + "/finds?key=" + key).catch(() => null);
+  if (u.pathname === "/finds" || u.pathname === "/bases") {
+    const r = await fetch(upstream + u.pathname + "?key=" + key).catch(() => null);
     res.writeHead(r && r.ok ? 200 : 502, { "Content-Type": "application/json" });
     res.end(r && r.ok ? await r.text() : "{}");
     return;
@@ -135,6 +135,16 @@ await shot("04-player-online", { prefs: { ...few, town: true, dungeon: true, cav
   view: [STAGED_PLAYER.pos[2] + 1200, STAGED_PLAYER.pos[0] + 1700, -2.2], panel: true,
   mark: [{ frame: { selector: "#playerList li", text: STAGED_PLAYER.name } },
          { arrow: { to: [STAGED_PLAYER.pos[2], STAGED_PLAYER.pos[0]], from: [-150, 150], gap: [-14, 14] } }] });
+
+// 5: the players' Flame Altars around the Grassland spire, tooltip on the main base.
+const bases = await (await fetch(upstream + "/bases?key=" + key)).json();
+const main = bases.bases.slice().sort((a, b) => b.size[0] - a.size[0])[0];
+if (main) {
+  stagePlayer = false;
+  await shot("05-flame-altars", { prefs: { ...few, shrine: false, altar: true, spawnaltar: true, town: true, well: true },
+    view: [main.z + 260, main.x - 180, -1.2], panel: true, hover: [main.z, main.x],
+    mark: [{ frame: { selector: "#poiList label", text: "Flame Altars" } }] });
+}
 
 await browser.close();
 clearInterval(poller);

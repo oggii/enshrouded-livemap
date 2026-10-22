@@ -37,6 +37,7 @@ int wmain(int argc, wchar_t** argv) {
         {"registry", t.registry, is_new ? 0x677240 : 0x675e10},
         {"mining", t.mining, is_new ? 0x2245a8 : 0x2236f8},
         {"chest", t.chest, is_new ? 0xa1afa : 0xa0c4a},
+        {"bases", t.bases, is_new ? 0xea090 : 0xe91e0},
         {"chat_post", t.chat_post, is_new ? 0x90b330 : 0x908ce0},
     };
     bool ok = true;

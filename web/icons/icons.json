@@ -1,4 +1,5 @@
 {
+ "altar": "altar.png",
  "bossunlock": "bossunlock.png",
  "camp": "camp.png",
  "cave": "cave.png",
@@ -15,6 +16,7 @@
  "obelisk": "obelisk.png",
  "questarea": "questarea.png",
  "shrine": "shrine.png",
+ "spawnaltar": "spawnaltar.png",
  "spire": "spire.png",
  "town": "town.png",
  "vault": "vault.png",

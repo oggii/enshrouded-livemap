@@ -38,6 +38,7 @@ const server = http.createServer((req, res) => {
   if (u.pathname === "/maps.json" && !useTiles) { res.writeHead(200, { "Content-Type": "application/json" }); res.end(imageMaps); return; }
   if (u.pathname.startsWith("/tiles/")) fs.existsSync(path.join(web, u.pathname)) ? tileHits++ : tileMisses++;
   if (u.pathname === "/finds") { res.writeHead(200, { "Content-Type": "application/json" }); res.end('{"version":0,"ore":[],"chests":[]}'); return; }
+  if (u.pathname === "/bases") { res.writeHead(200, { "Content-Type": "application/json" }); res.end('{"version":0,"bases":[]}'); return; }
   const file = files[u.pathname] || path.join(web, u.pathname === "/" ? "index.html" : u.pathname);
   if (!file.startsWith(web) && !Object.values(files).includes(file)) { res.writeHead(403); res.end(); return; }
   fs.readFile(file, (err, data) => {

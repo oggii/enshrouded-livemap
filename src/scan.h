@@ -28,6 +28,11 @@ struct Targets {
     // accountIdHash, {value, has}*): queues one chat line for every connected client. The
     // server uses it for join/leave lines (type 4 with a loca tag). chat = manager + 0x60.
     uintptr_t chat_post = 0;
+    // Optional: the loop head of FUN_1400e90e0, the ECS system add_buildzones_server, which walks
+    // every player base (Flame Altar) each tick, once per ECS chunk. [rbp-0x18] = BaseIdComponent
+    // (16-byte BaseId, wasAbandoned at +0x28), [rbp-0x10] = the altar's transform (position
+    // 3 x int64 32.32 fixed point), [rbp-0x8] = its build zone (size float3 at +4).
+    uintptr_t bases = 0;
     const char* build = nullptr;  // label of the recognised server build
 };
 

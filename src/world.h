@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 
+#include "bases.h"
 #include "finds.h"
 #include "scan.h"
 
@@ -29,6 +30,10 @@ finds::Store& store();
 void install_mining(const Targets& targets);
 // Installs the optional chest hook (no-op when the site was not found).
 void install_chest(const Targets& targets);
+// Flame Altars (player bases) the server's build zone system walks; web.cpp serves them.
+bases::Store& bases_store();
+// Installs the optional bases hooks (no-op when the sites were not found).
+void install_bases(const Targets& targets);
 // Research switch: after a player joins, post one chat line per message type 0..7.
 void enable_chat_probe(const Targets& targets);
 
