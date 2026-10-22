@@ -70,6 +70,7 @@ def main():
     ap.add_argument("--offset", type=float, nargs=2, default=(0.0, 0.0))
     ap.add_argument("--out", required=True, help="tile folder")
     ap.add_argument("--preview", help="also save a 1024 px preview JPG")
+    ap.add_argument("--format", choices=("jpg", "webp"), default="jpg", help="tile format")
     args = ap.parse_args()
 
     picture = load_picture(args.picture, args.rgba_size)
@@ -79,7 +80,8 @@ def main():
         Image.fromarray(img).resize((1024, 1024), Image.LANCZOS).save(args.preview, "JPEG", quality=85)
     border = np.concatenate([img[:, :64].reshape(-1, 3), img[:, -64:].reshape(-1, 3)])
     edge = tuple(int(round(v)) for v in border.mean(axis=0))
-    n, total = render_map.write_tiles(img, args.out, range(-5, 1), edge)
+    render_map.WEBP_QUALITY = 89  # HD: same bytes as JPEG q84, SSIM 0.9881 vs 0.9877
+    n, total = render_map.write_tiles(img, args.out, range(-5, 1), edge, args.format)
     print("%d tiles, %.1f MB in %s; background #%02x%02x%02x" % (n, total / 2 ** 20, args.out, *edge))
 
 

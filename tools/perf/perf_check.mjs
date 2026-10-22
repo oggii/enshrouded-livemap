@@ -46,16 +46,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const browser = await chromium.launch({ executablePath: findChrome(), headless: true });
 
-// Waits until the map image is shown, markers are drawn and the first live update arrived.
+// Waits until the map is shown (an image map loaded, or every tile of a tile map in view
+// loaded), markers are drawn and the first live update arrived.
 async function waitFullMap(page, timeout = 60000) {
   const t0 = Date.now();
   await page.waitForFunction(() => {
     const img = document.querySelector(".leaflet-image-layer");
+    const tiles = [...document.querySelectorAll("img.leaflet-tile")];
+    const mapShown = img ? img.complete && img.naturalWidth > 0
+      : tiles.length > 0 && tiles.every(t => t.complete && t.naturalWidth > 0);
     const lm = window.livemap;
     const hits = lm && lm.poiLayer._hits;
     const drawn = hits ? (hits.n !== undefined ? hits.n : hits.length) : 0;
-    return img && img.complete && img.naturalWidth > 0 && drawn > 0 &&
-      document.getElementById("gameTime").textContent !== "--:--";
+    return mapShown && drawn > 0 && document.getElementById("gameTime").textContent !== "--:--";
   }, null, { timeout, polling: 50 });
   return Date.now() - t0;
 }

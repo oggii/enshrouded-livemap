@@ -482,7 +482,16 @@
         under++;
         if (best < 0 || rank(h.p[i]) < rank(h.p[best])) best = i;
       }
-      if (best < 0) { this._leave(); return; }
+      if (best < 0) {
+        // No marker here: rain or snow under the cursor, if any (the weather layer itself never
+        // takes the pointer).
+        const tip = weatherTip(this._map.containerPointToLatLng(pt));
+        if (!tip) { this._leave(); return; }
+        this._tip.setLatLng(this._map.containerPointToLatLng(pt)).setContent(tip);
+        if (!this._tipOpen) { this._map.openTooltip(this._tip); this._tipOpen = true; }
+        this._map.getContainer().style.cursor = "";
+        return;
+      }
       const p = h.p[best];
       const looted = !p.isFind && lootedByPoi.size ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
       this._tip.setLatLng([p[3], p[1]]).setContent(p[4] + " · " + p[2].toFixed(0) + " m"
@@ -684,67 +693,235 @@
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
-  // Weather phenomena of build 25988414 (WeatherSystemResource): index -> kind.
+  // Weather phenomena of WeatherSystemResource: index -> kind (clouds of layer 0 give the label
+  // when nothing falls).
   const PHENOMENA = ["fewclouds", "clouds", "overcast", "fewclouds", "rain", "snow", "rain", "blizzard", "rain",
     "rain", "rain", "rain", "rain"];
-  const WEATHER_LABEL = { rain: "Rain", snow: "Rain / snow", blizzard: "Blizzard", overcast: "Overcast",
-    clouds: "Cloudy", fewclouds: "Partly cloudy", clear: "Clear" };
-  const WEATHER_COLOR = { rain: "#6fb4ff", snow: "#dfe9ff", blizzard: "#ffffff" };
-  // Assumed movement direction of a zone: (cos rotation, sin rotation) in (x, z). Not yet
-  // confirmed in game; set to false to use (sin, cos).
-  const DIR_COS_SIN = true;
+  const WEATHER_LABEL = { rain: "Rain", lightrain: "Light rain", snow: "Snow", lightsnow: "Light snow",
+    blizzard: "Blizzard", overcast: "Overcast", clouds: "Cloudy", fewclouds: "Partly cloudy", clear: "Clear" };
 
+  // A zone drifts along (cos rotation, sin rotation) in (x, z): the client's FUN_140a988e0.
   function zoneCenter(w, now) {
     const t = Math.max(0, Math.min(now, w.despawnTime) - w.spawnTime);
-    const dx = DIR_COS_SIN ? Math.cos(w.rotation) : Math.sin(w.rotation);
-    const dz = DIR_COS_SIN ? Math.sin(w.rotation) : Math.cos(w.rotation);
-    return [w.spawn[0] + dx * w.speed * t, w.spawn[1] + dz * w.speed * t];
+    return [w.spawn[0] + Math.cos(w.rotation) * w.speed * t, w.spawn[1] + Math.sin(w.rotation) * w.speed * t];
   }
 
-  // Weather at a world position: the strongest precipitation zone covering it, else cloud cover.
-  function weatherAt(weather, pos) {
-    if (!weather) return null;
-    let best = "clear";
-    const rank = { clear: 0, fewclouds: 1, clouds: 2, overcast: 3, rain: 4, snow: 5, blizzard: 6 };
+  // Rain and snow the way the game client computes them (FUN_140a9b9e0, docs/RESEARCH.md section
+  // 15) from livemap/weather.json (tools/extract_weather.py) and the server's live zones: per zone
+  // fade x region mask x (1 - exclude mask) x rain mask (rotated, relative to the zone), minus
+  // the phenomenon's threshold; snow = height ramp x snow border mask.
+  let WX = null;
+  function decodeMask(m) {
+    const s = atob(m.bits), data = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) data[i] = s.charCodeAt(i);
+    return { ...m, data };
+  }
+  function maskBit(m, px, py) {
+    if (px < 0 || py < 0 || px >= m.size[0] || py >= m.size[1]) return 0;
+    const x = px - m.offset[0], y = py - m.offset[1];
+    if (x < 0 || y < 0 || x >= m.count[0] || y >= m.count[1]) return 0;
+    const i = y * m.count[0] + x;
+    return (m.data[i >> 3] >> (i & 7)) & 1;
+  }
+  // Bilinear over the 1-bit mask at relative (u, v); tiling masks wrap around.
+  function maskSample(m, u, v, tiling) {
+    const fx = m.size[0] * u - 0.5, fy = m.size[1] * v - 0.5;
+    let x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = fx - x0, ty = fy - y0;
+    let x1 = x0 + 1, y1 = y0 + 1;
+    if (tiling) {
+      const w = m.size[0], h = m.size[1];
+      x0 = ((x0 % w) + w) % w; x1 = ((x1 % w) + w) % w; y0 = ((y0 % h) + h) % h; y1 = ((y1 % h) + h) % h;
+    }
+    const a = maskBit(m, x0, y0), b = maskBit(m, x1, y0), c = maskBit(m, x0, y1), d = maskBit(m, x1, y1);
+    const top = a + (b - a) * tx, bottom = c + (d - c) * tx;
+    return top + (bottom - top) * ty;
+  }
+  const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  function zoneFade(w, ph, t) {
+    let f = 1;
+    if (ph.fadeIn > 0) f = clamp01((t - w.spawnTime) / ph.fadeIn);
+    if (ph.fadeOut > 0) f *= clamp01((w.despawnTime - t) / ph.fadeOut);
+    return f;
+  }
+  // Region factor of a layer at (x, z): restrict mask x (1 - exclude mask).
+  function regionFactor(layer, x, z) {
+    let v = 1;
+    if (layer.restrict < WX.layerMasks.length) { const m = WX.layerMasks[layer.restrict]; v *= maskSample(m, x * m.w2r[0], z * m.w2r[1]); }
+    if (v > 0 && layer.exclude < WX.layerMasks.length) { const m = WX.layerMasks[layer.exclude]; v *= 1 - maskSample(m, x * m.w2r[0], z * m.w2r[1]); }
+    return v;
+  }
+  // One zone's contribution at (x, z) before the threshold; `region` may be precomputed.
+  function zoneRaw(w, ph, x, z, t, center, region) {
+    let v = zoneFade(w, ph, t);
+    if (v <= 0) return 0;
+    const layer = WX.layers[w.layer];
+    if (layer) v *= region === undefined ? regionFactor(layer, x, z) : region;
+    if (v > 0 && ph.rainMask < WX.rainMasks.length) {
+      const r = Math.max(w.radius, 1), dx = (x - center[0]) / r, dz = (z - center[1]) / r;
+      const cs = Math.cos(w.rotation), sn = Math.sin(w.rotation);
+      v *= maskSample(WX.rainMasks[ph.rainMask], (dz * sn + dx * cs) * 0.5 + 0.5, (dz * cs - dx * sn) * 0.5 + 0.5, ph.tiling);
+    }
+    return Math.min(1, Math.max(0, v - ph.threshold)) / (1 - ph.threshold);
+  }
+  function snowFactor(x, y, z) {
+    if (y === null) {  // no height: the precomputed grid (game height map)
+      const g = WX.snowGrid, n = WX.snowGridN;
+      if (!g) return 0;
+      const i = Math.min(n - 1, Math.max(0, Math.floor(z / WX.worldSize * n))), j = Math.min(n - 1, Math.max(0, Math.floor(x / WX.worldSize * n)));
+      return g[i * n + j] / 255;
+    }
+    const s = clamp01(y * WX.snowRange[0] + WX.snowRange[1]);
+    return s > 0 ? s * maskSample(WX.snowMask, x * WX.snowMask.w2r[0], z * WX.snowMask.w2r[1]) : 0;
+  }
+  // {clear, rain, snow, blizzard} weights at a position (y = height, or null), plus the zone
+  // that adds most.
+  function weatherWeights(weather, x, y, z) {
+    let rain = 0, bliz = 0, top = null, topV = 0;
+    const t = weather.worldTime;
     for (const w of weather.instances) {
-      const kind = PHENOMENA[w.phenomenon] || "clouds";
-      if (weather.worldTime < w.spawnTime || weather.worldTime > w.despawnTime) continue;
-      const c = zoneCenter(w, weather.worldTime);
-      if (Math.hypot(pos[0] - c[0], pos[2] - c[1]) <= w.radius && rank[kind] > rank[best]) best = kind;
+      const ph = WX.phenomena[w.phenomenon];
+      if (!ph || ph.effect === "None") continue;
+      const v = zoneRaw(w, ph, x, z, t, zoneCenter(w, t));
+      if (ph.effect === "Rain") rain += v; else if (ph.effect === "Blizzard") bliz += v;
+      if (v > topV) { topV = v; top = w; }
     }
-    return best;
+    rain = Math.min(1, rain); bliz = Math.min(1, bliz); rain = Math.max(0, rain - bliz);
+    const snow = snowFactor(x, y, z);
+    return { clear: 1 - rain - bliz, rain: (bliz + rain) * (1 - snow), snow: snow * rain, blizzard: bliz * snow, zone: top };
+  }
+  function cloudKind(weather) {
+    let kind = "clear";
+    for (const w of weather.instances) {
+      const k = PHENOMENA[w.phenomenon];
+      if (w.layer === 0 && weather.worldTime >= w.spawnTime && weather.worldTime <= w.despawnTime && k) kind = k;
+    }
+    return kind;
+  }
+  // Label for a weather state at a position: what falls there, else the cloud cover.
+  function weatherLabel(weather, pos) {
+    if (!weather || !WX) return null;
+    const w = weatherWeights(weather, pos[0], pos[1], pos[2]);
+    if (w.blizzard >= 0.05) return "blizzard";
+    if (w.snow >= 0.05 && w.snow >= w.rain) return w.snow < 0.35 ? "lightsnow" : "snow";
+    if (w.rain >= 0.05) return w.rain < 0.35 ? "lightrain" : "rain";
+    return cloudKind(weather);
+  }
+  function activeZones(weather) {
+    if (!weather || !WX) return 0;
+    return weather.instances.filter(w => { const ph = WX.phenomena[w.phenomenon]; return ph && ph.effect !== "None" && zoneFade(w, ph, weather.worldTime) > 0; }).length;
+  }
+  // Hover text for a map position with rain or snow (no clickable layer: the POI hit test asks).
+  function weatherTip(latlng) {
+    if (!lastState || !lastState.weather || !WX) return null;
+    const x = latlng.lng, z = latlng.lat, w = weatherWeights(lastState.weather, x, null, z);
+    const fall = Math.max(w.rain, w.snow, w.blizzard);
+    if (fall < 0.05 || !w.zone) return null;
+    const kind = w.blizzard >= fall ? "Blizzard" : w.snow >= fall ? "Snow" : "Rain";
+    const left = Math.max(0, Math.round((w.zone.despawnTime - lastState.weather.worldTime) / 60));
+    const deg = (90 - w.zone.rotation * 180 / Math.PI + 360) % 360;  // compass: 0 = north (+z)
+    const dir = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+    return kind + " · " + Math.round(fall * 100) + " % · " + (left < 1 ? "ending" : "about " + left + " min left")
+      + (w.zone.speed > 0.2 ? " · drifting " + dir + " at " + w.zone.speed.toFixed(1) + " m/s" : "");
   }
 
-  // Weather zones are kept between updates (one circle per zone) and only moved.
-  const weatherCircles = new Map();
-  function renderWeather(weather) {
-    const seen = new Set();
-    if (weather) {
+  // The rain and snow actually falling, as a 256 x 256 raster (40 m) over the world, redrawn every
+  // 3 s on its own canvas below the markers; never interactive.
+  const WeatherLayer = L.Layer.extend({
+    onAdd(m) {
+      this._canvas = L.DomUtil.create("canvas", "weather-layer");
+      this._canvas.style.pointerEvents = "none";
+      m.getPanes().overlayPane.appendChild(this._canvas);
+      this._grid = document.createElement("canvas");
+      this._grid.width = this._grid.height = 256;
+      m.on("moveend zoomend resize", this._draw, this);
+      m.on("zoomstart", this._hide, this);
+      this._draw();
+    },
+    onRemove(m) { m.off("moveend zoomend resize", this._draw, this); m.off("zoomstart", this._hide, this); this._canvas.remove(); },
+    _hide() { if (this._canvas) this._canvas.style.opacity = 0; },
+    // Static per layer: the region factor on the grid (computed once).
+    _regions() {
+      if (this._region) return this._region;
+      const n = 256, cell = WX.worldSize / n;
+      this._region = WX.layers.map(layer => {
+        const g = new Float32Array(n * n);
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) g[i * n + j] = regionFactor(layer, (j + 0.5) * cell, (i + 0.5) * cell);
+        return g;
+      });
+      return this._region;
+    },
+    update(weather) {
+      const now = performance.now();
+      if (!WX || !weather || (this._last && now - this._last < 3000)) return;
+      this._last = now;
+      const n = 256, cell = WX.worldSize / n, t = weather.worldTime;
+      const rain = new Float32Array(n * n), bliz = new Float32Array(n * n);
+      const regions = this._regions();
       for (const w of weather.instances) {
-        const kind = PHENOMENA[w.phenomenon] || "clouds";
-        if (!WEATHER_COLOR[kind] || weather.worldTime > w.despawnTime) continue;
-        const key = w.layer + ":" + w.phenomenon + ":" + w.spawnTime;
-        const c = zoneCenter(w, weather.worldTime);
-        const left = Math.max(0, Math.round((w.despawnTime - weather.worldTime) / 60));
-        const text = WEATHER_LABEL[kind] + " zone (falls only inside its region) · " + (left < 1 ? "ending" : "about " + left + " min left");
-        let circle = weatherCircles.get(key);
-        if (!circle) {
-          circle = L.circle(L.latLng(c[1], c[0]), {
-            radius: w.radius, color: WEATHER_COLOR[kind], weight: 1, opacity: 0.6, fillOpacity: 0.12,
-            dashArray: "6 6", interactive: false,  // never grabs the pointer or a focus outline while panning
-          }).addTo(map);
-          circle._text = text;
-          weatherCircles.set(key, circle);
-        } else {
-          const ll = circle.getLatLng();
-          if (Math.abs(ll.lat - c[1]) > 0.5 || Math.abs(ll.lng - c[0]) > 0.5) circle.setLatLng(L.latLng(c[1], c[0]));
-          circle._text = text;
+        const ph = WX.phenomena[w.phenomenon];
+        if (!ph || ph.effect === "None" || zoneFade(w, ph, t) <= 0) continue;
+        const c = zoneCenter(w, t), r = w.radius, region = regions[w.layer];
+        const j0 = Math.max(0, Math.floor((c[0] - r) / cell)), j1 = Math.min(n - 1, Math.ceil((c[0] + r) / cell));
+        const i0 = Math.max(0, Math.floor((c[1] - r) / cell)), i1 = Math.min(n - 1, Math.ceil((c[1] + r) / cell));
+        const out = ph.effect === "Blizzard" ? bliz : rain;
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+          const k = i * n + j, reg = region ? region[k] : 1;
+          if (reg <= 0) continue;
+          out[k] += zoneRaw(w, ph, (j + 0.5) * cell, (i + 0.5) * cell, t, c, reg);
         }
-        seen.add(key);
       }
+      const ctx = this._grid.getContext("2d"), img = ctx.createImageData(n, n), px = img.data;
+      let any = false;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const k = i * n + j;
+        let r = Math.min(1, rain[k]), b = Math.min(1, bliz[k]);
+        r = Math.max(0, r - b);
+        const fall = r + b;
+        if (fall < 0.02) continue;
+        const s = WX.snowGrid ? WX.snowGrid[k] / 255 : 0, o = ((n - 1 - i) * n + j) * 4;  // row 0 of the image = north
+        px[o] = 80 + 175 * s; px[o + 1] = 150 + 100 * s; px[o + 2] = 255; px[o + 3] = Math.round(105 * Math.min(1, fall * 1.4));
+        any = true;
+      }
+      ctx.putImageData(img, 0, 0);
+      this._any = any;
+      this._draw();
+    },
+    _draw() {
+      const m = this._map;
+      if (!m || !this._canvas) return;
+      const size = m.getSize(), c = this._canvas;
+      if (c.width !== size.x || c.height !== size.y) { c.width = size.x; c.height = size.y; }
+      L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+      const ctx = c.getContext("2d");
+      ctx.clearRect(0, 0, size.x, size.y);
+      c.style.opacity = 1;
+      if (!this._any) return;
+      const a = m.latLngToContainerPoint([WX.worldSize, 0]), b = m.latLngToContainerPoint([0, WX.worldSize]);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this._grid, a.x, a.y, b.x - a.x, b.y - a.y);
+    },
+  });
+  const weatherLayer = new WeatherLayer().addTo(map);
+  // Console and test access: livemap.weather.weights([x, y, z]) etc.
+  window.livemap.weather = {
+    state: () => lastState,
+    weights: pos => weatherWeights(lastState.weather, pos[0], pos[1], pos[2]),
+    label: pos => weatherLabel(lastState.weather, pos),
+    forceUpdate() { weatherLayer._last = 0; weatherLayer.update(lastState.weather); },
+  };
+  fetchJsonRetry("weather.json" + q, null).then(w => {
+    if (!w) return;
+    const decode = m => decodeMask(m);
+    WX = { ...w, snowMask: decode(w.snowMask), layerMasks: w.layerMasks.map(decode), rainMasks: w.rainMasks.map(decode) };
+    if (w.snowGrid) {
+      const s = atob(w.snowGrid.bytes);
+      WX.snowGrid = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) WX.snowGrid[i] = s.charCodeAt(i);
+      WX.snowGridN = w.snowGrid.n;
     }
-    for (const [key, circle] of weatherCircles) if (!seen.has(key)) { circle.remove(); weatherCircles.delete(key); }
-  }
+    if (lastState) weatherLayer.update(lastState.weather);
+  });
 
   // Player list rows are reused; text is only touched when it changes.
   const playerRows = new Map();
@@ -754,10 +931,10 @@
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
-    renderWeather(state.weather);
+    weatherLayer.update(state.weather);
     const firstWithPos = state.players.find(p => p.pos);
-    const here = firstWithPos ? weatherAt(state.weather, firstWithPos.pos) : null;
-    const zones = state.weather ? state.weather.instances.filter(w => WEATHER_COLOR[PHENOMENA[w.phenomenon]]).length : 0;
+    const here = firstWithPos ? weatherLabel(state.weather, firstWithPos.pos) : null;
+    const zones = activeZones(state.weather);
     const weatherText = here ? WEATHER_LABEL[here] : state.weather ? (zones ? zones + " rain zone" + (zones > 1 ? "s" : "") : "Clear") : "–";
     const clockText = (fmtGameTime(state.time) || "--:--") + "|" + (state.time ? (state.time.isDay ? "Day" : "Night") : "–") + "|" + weatherText;
     if (clockText !== lastClockText) {
@@ -778,7 +955,7 @@
       seen.add(p.entity);
       const color = colors[p.entity % colors.length];
       const name = p.name || ("Player " + p.entity);
-      const w = p.pos ? weatherAt(state.weather, p.pos) : null;
+      const w = p.pos ? weatherLabel(state.weather, p.pos) : null;
       const coords = p.pos ? p.pos[0].toFixed(0) + ", " + p.pos[2].toFixed(0) + (w ? " · " + WEATHER_LABEL[w] : "") : "–";
       let row = playerRows.get(p.entity);
       if (!row) {

@@ -1,7 +1,7 @@
 {
   "worldSize": 10240,
   "maps": [
-    { "name": "Game map", "tiles": "tiles/{z}_{x}_{y}.jpg", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#402d3b" },
-    { "name": "HD", "tiles": "tiles-hd/{z}_{x}_{y}.jpg", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#4e365d" }
+    { "name": "Game map", "tiles": "tiles/{z}_{x}_{y}.webp", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#402d3b" },
+    { "name": "HD", "tiles": "tiles-hd/{z}_{x}_{y}.webp", "tileSize": 512, "minNativeZoom": -5, "maxNativeZoom": 0, "background": "#4e365d" }
   ]
 }

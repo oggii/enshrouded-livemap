@@ -52,6 +52,7 @@ SHROUD_BORDER = (10, 50)     # zone distance values mapped onto the border gradi
 SEA_NOISE = 0.18
 TILE = 512
 JPEG_QUALITY = 84
+WEBP_QUALITY = 91      # --format webp; q91 = SSIM 0.9895 at 91 % of the bytes of JPEG q84 (0.9847)
 
 
 def descriptor(folder, part):
@@ -181,7 +182,7 @@ def render(data, size, band=512):
     return out
 
 
-def write_tiles(img, out_dir, levels, background):
+def write_tiles(img, out_dir, levels, background, fmt="jpg"):
     """Leaflet CRS.Simple tiles: at zoom z one metre is 2^z pixels; native zoom 0 = 1 m/px.
     Files are named <z>_<x>_<y>.jpg with Leaflet's own tile coordinates: the grid starts at the
     south-west corner (world 0, 0), so y is negative (-1 = the southern row). Where a level is
@@ -200,8 +201,11 @@ def write_tiles(img, out_dir, levels, background):
                 box = (x * TILE, max(0, top), min(size, (x + 1) * TILE), top + TILE)
                 tile.paste(level_img.crop(box), (0, box[1] - top))
                 buf = io.BytesIO()
-                tile.save(buf, "JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True)
-                with open(os.path.join(out_dir, "%d_%d_%d.jpg" % (z, x, y)), "wb") as f:
+                if fmt == "webp":
+                    tile.save(buf, "WEBP", quality=WEBP_QUALITY, method=6)
+                else:
+                    tile.save(buf, "JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True)
+                with open(os.path.join(out_dir, "%d_%d_%d.%s" % (z, x, y, fmt)), "wb") as f:
                     f.write(buf.getvalue())
                 written += 1
                 total += len(buf.getvalue())
@@ -216,6 +220,7 @@ def main():
     ap.add_argument("--png", help="also save the whole render as this image")
     ap.add_argument("--preview", help="save a small JPG preview (1024 px) here")
     ap.add_argument("--out", help="tile folder (only with --size 10240)")
+    ap.add_argument("--format", choices=("jpg", "webp"), default="jpg", help="tile format")
     args = ap.parse_args()
 
     data = load(args.game, args.textures)
@@ -230,7 +235,7 @@ def main():
         # (maps.json "background"), so the map has no visible edge.
         border = np.concatenate([img[:, :64].reshape(-1, 3), img[:, -64:].reshape(-1, 3)])
         sea = tuple(int(round(v)) for v in border.mean(axis=0))
-        n, total = write_tiles(img, args.out, range(-5, 1), sea)
+        n, total = write_tiles(img, args.out, range(-5, 1), sea, args.format)
         print("%d tiles, %.1f MB in %s; background %s" % (n, total / 2 ** 20, args.out, "#%02x%02x%02x" % sea))
 
 

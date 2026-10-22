@@ -304,3 +304,38 @@ pixels and writes 72 px PNGs. The registry also says enemy camps are drawn large
   dumps: "OG Vanilla K" 12/16, a 19-byte name 19/32). 1.0.x read the field as inline text first;
   a pointer without an early zero byte became a garbled name. Now pointer + length, cleaned to
   valid UTF-8 (src/text.cpp, tests/text_test.cpp).
+
+## 15. Weather the way the client computes it (2026-10-22)
+
+Reported: the page said "Rain" for players while it was dry in game. Cause: the page counted
+everything inside a zone's circle as rain. The client decides in FUN_140a9b9e0 (client build of
+2026-10-17; RVA 0xa9d530 in the build of 2026-10-20, found by the entry bytes the Sparkweave
+Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain / Snow / Blizzard:
+
+- For every zone whose phenomenon has an effect (Rain = 1, Blizzard = 2; the cloud phenomena of
+  layer 0 have none): v = fade (FUN_140a98860: ramp over spawnFadeTime after spawn, times the
+  ramp over despawnFadeTime before despawn) x restrictMask(layer) x (1 - excludeMask(layer)) x
+  rainMask(u, v), then v = clamp(v - rainThreshold, 0, 1) / (1 - rainThreshold); summed per
+  effect, each capped at 1, rain = max(rain - blizzard, 0).
+- Region masks are sampled at (x * worldToRelative.x, z * worldToRelative.y) (checked in the
+  machine code before the call). The rain mask at the offset from the zone centre, divided by the
+  radius and rotated: u = (dz sin r + dx cos r) / 2 + 1/2, v = (dz cos r - dx sin r) / 2 + 1/2;
+  tiling phenomena wrap, the others clamp to 0.
+- The zone centre moves along (cos r, sin r) at its speed (FUN_140a988e0), as the page assumed.
+- Masks (FUN_140a97f10, tiled FUN_140a97b00): 1-bit images, originalSize, a stored sub-rectangle
+  (pixelOffset, pixelCount), bits row by row, least significant first, row 0 at z = 0; bilinear
+  over the four neighbours at (size * u - 0.5, size * v - 0.5).
+- Snow: s = clamp(y * 0.03125 - 40.84375, 0, 1) x snowBorderMask (snowBorderRangeMapping): above
+  about 1307 m and inside the mask. Output: clear = 1 - rain - blizzard, rain = (rain + blizzard)
+  (1 - s), snow = rain s, blizzard = blizzard s.
+- Data (WeatherSystemResource): 8 layer masks of 64 x 64 cells (160 m) that follow the biome
+  borders; rain phenomena threshold 0.25 with rain mask 2 (77 x 77, only a 40 x 36 part set, so
+  rain falls in a blob in the middle of the circle); layers 4 and 8 have no phenomenon (never
+  rain); fades 20 s. tools/extract_weather.py writes web/weather.json (122 KB, with a 256 x 256
+  snow factor grid from the game's height map). Check: the computed snow factor is white exactly
+  on the snowy peaks of the HD map, and the region borders follow the biome borders.
+- Page: livemap.weather.* in the console; the rain and snow that falls is a 256 x 256 raster
+  (40 m) redrawn every 3 s (about 3 ms with three active zones), hover text through the marker
+  hit test (nothing takes the pointer). Player labels: Light rain below 35 %, Rain, Snow, else the
+  cloud cover of layer 0.
+- Not yet checked in game: the first rain under the new model.
