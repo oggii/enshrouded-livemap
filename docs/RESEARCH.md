@@ -339,3 +339,24 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   hit test (nothing takes the pointer). Player labels: Light rain below 35 %, Rain, Snow, else the
   cloud cover of layer 0.
 - Not yet checked in game: the first rain under the new model.
+
+## 16. The game's own names, and player altar names (2026-10-22)
+
+- Every MapMarker has `markerId`, a LocaTag guid. The client keeps the texts per language in one
+  content blob of LocaTagCollectionResource (En_Us 1.7 MB, 16715 texts; LocaTagResource 24 bytes:
+  id, text {offset, length}, arguments, genericArguments). The id is FNV-1a 32 over the guid's
+  little-endian bytes, like the marker type ids (MapMarker_Tower_Capital_FastTravel ->
+  "Revelwood", which the game shows as "Ancient Spire / Revelwood"). Marker types with a
+  `typeName` in MapMarkerRegistryResource: only Ancient Spire and Fast Travel Point. Texts carry
+  markup (<location>, <npc>, <lorename>, <craftingstation>) that tools/game_texts.py strips.
+  Result: "Ancient Spire · Revelwood", "Passage to the Blackmire", "Braelyn Bridge",
+  'Balefire Garrison "White Pine"', "Collections: Hollow" ... (tools/extract_pois.py --game
+  --loca --registry).
+- Player-given altar names ("HOME level 1" in the game's map): not on the server. Read-only
+  searches on the live server: pointer walk from PlayerBasesSystemServer and
+  CustomPlayerStringsSystem (about 5000 objects each), the whole writable memory for "home level"
+  (case-insensitive, UTF-8 and UTF-16, 1 min at nice 19), and the world save world0.ksd (SV2C file
+  with S2BH chunks, 3 zstd frames, 36 KB unpacked): no hit. What the server has: a table of
+  account names (S2BH record: account id hash -> display name, e.g. "SS Kommandozentrale",
+  "Cybertonic", "FindOnePiece"). The local character saves (Steam userdata 1203620, last written
+  before the name was seen) had no hit either. Open: whether other players see such a name.
