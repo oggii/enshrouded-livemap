@@ -117,7 +117,7 @@ If it does not sit right, open the map with `&calibrate` added to the link and f
 
 ## Works with Shared XP
 
-Both mods add a line to the chat after "Player X joined." and can run together; whichever starts
+Shared XP 1.1.3 or newer. Both mods add a line to the chat after "Player X joined." and can run together; whichever starts
 second adds its hook on top of the first one.
 
 ## Build
