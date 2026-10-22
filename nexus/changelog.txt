@@ -1,3 +1,12 @@
+1.2.0
+- Weather like in the game: rain and snow are computed with the game's own rules (each
+  weather layer only rains inside its region, fade in and out, the zone's rain shape, snow
+  above the snow line). Before, the whole circle counted as rain, so the map could say "Rain"
+  while it was dry in game. The map draws where it really rains or snows instead of circles;
+  hover for strength, time left and drift. Players show Light rain / Rain / Snow.
+- Sharper map at fewer bytes: tiles are WebP now (about a third less image error than the
+  JPEG tiles at 9 % fewer bytes), the same loading speed.
+
 1.1.0
 - New: your Flame Altars on the map, live from the server, with the game's altar icon and the
   size of the build zone. New altars appear within seconds, removed ones disappear. Bases=0 in
