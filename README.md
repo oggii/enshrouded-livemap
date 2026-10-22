@@ -115,6 +115,13 @@ You can add your own map picture as a second style in `livemap/maps.json`:
 `bounds` is the part of the world the picture covers, in metres (`[[south, west], [north, east]]`).
 If it does not sit right, open the map with `&calibrate` added to the link and follow the steps.
 
+### Optional: HD map style
+
+On Nexus Mods there is an optional file with a second, colourful map style: an HD map picture
+by Nick (shipped in Aerox912's Sparkweave Minimap, Nexus #143), made sharp with the game's
+relief by `tools/enhance_map.py`. Unzip it over the install; it adds `livemap/tiles-hd` and a
+`maps.json` with both styles. The picture is not part of this repository.
+
 ## Works with Shared XP
 
 Shared XP 1.1.3 or newer. Both mods add a line to the chat after "Player X joined." and can run together; whichever starts

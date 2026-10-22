@@ -15,6 +15,7 @@ A live map of your server in the browser. Everyone with the link sees who is onl
 [*][b]Looted chests:[/b] a chest someone opened turns grey with a check mark (with name and date); one switch hides all looted chests.
 [*][b]The game's own map:[/b] drawn from the map data inside the game (height, relief, contour lines, Shroud zones), sharp down to 1 metre per pixel when you zoom in. Only the part you look at is loaded.
 [*][b]Fast:[/b] thousands of markers on one canvas, smooth panning and zooming, also on phones.
+[*][b]Optional HD map style[/b] (separate file): a colourful map picture by Nick, made sharp with the game's own relief. Switch between the game map and HD at the bottom left.
 [*][b]Your own map picture:[/b] add any map image as a second style in [i]livemap/maps.json[/i]; a calibration helper lines it up.
 [/list]
 
@@ -42,6 +43,8 @@ You find the full link in [i]livemap.log[/i] ("map link: ...") to post in your D
 [*]Add [i]iphlpapi=n,b[/i] to [i]WINEDLLOVERRIDES[/i] (with Shared XP: [i]WINEDLLOVERRIDES=powrprof=n,b;iphlpapi=n,b[/i]) and publish the TCP port.
 [*]Start the container.
 [/list]
+[b]Optional HD map:[/b] unzip the optional file [i]HD map style[/i] into the same folder (it adds [i]livemap/tiles-hd[/i] and replaces [i]livemap/maps.json[/i]), reload the page. No restart needed.
+
 [b]Check:[/b] [i]livemap.log[/i] shows "map link: http://..." and, after a player joins, the chat shows "Live map: ...". Open the link from outside your network (for example your phone without Wi-Fi).
 
 [b]Uninstall:[/b] stop the server and delete iphlpapi.dll, the livemap folder, livemap.ini and livemap.log.
@@ -101,5 +104,6 @@ Open source (MIT): [url=https://github.com/oggii/enshrouded-livemap]github.com/o
 [size=4][b]Shout outs[/b][/size]
 [list]
 [*]Keen Games for Enshrouded. Map art and icons © Keen Games.
+[*]Nick for the HD map picture, as shipped in Aerox912's Sparkweave Minimap ([url=https://www.nexusmods.com/enshrouded/mods/143]Nexus #143[/url]), based on elxokker's [url=https://www.nexusmods.com/enshrouded/mods/97]Enshrouded Minimap[/url].
 [*][url=https://leafletjs.com]Leaflet[/url] for the map view, [url=https://github.com/cursey/safetyhook]SafetyHook[/url] and [url=https://github.com/zyantific/zydis]Zydis[/url] for the hooking.
 [/list]
