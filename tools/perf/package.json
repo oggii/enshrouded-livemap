@@ -1,0 +1,7 @@
+{
+  "name": "livemap-perf-check",
+  "private": true,
+  "type": "module",
+  "description": "Measures the live map page like a user would and judges it against hard targets.",
+  "dependencies": { "playwright-core": "^1.50.0" }
+}

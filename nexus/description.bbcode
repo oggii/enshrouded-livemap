@@ -1,0 +1,87 @@
+[center][img]https://raw.githubusercontent.com/oggii/enshrouded-livemap/main/nexus/banner.jpg[/img][/center]
+
+[size=4][b]Description[/b][/size]
+A live map of your server in the browser. Everyone with the link sees who is online and where, which way they are walking, the time of day, the weather, and every place the game marks on its map. It also remembers what your group finds: every ore vein someone mines and every chest someone opens shows up on the map for everybody.
+
+[b]Server-side only.[/b] The mod runs inside the dedicated server and serves the map itself. Players install nothing; they open a link on PC, tablet or phone. When a player joins, the chat shows the link.
+
+[size=4][b]Main features[/b][/size]
+[list]
+[*][b]Players live:[/b] names, positions and an arrow for the walking direction, updated four times a second.
+[*][b]Time and weather:[/b] in-game clock with day and night, real time, rain and snow zones drawn on the map.
+[*][b]All map markers from the game's own data:[/b] about 3,700 points in 28 categories with the game's icons, each category can be switched on and off: Ancient Spires, fast travel points, Flame Shrines, Elixir Wells, towns, dungeons, Night Temples, caves, mines, Gem Forges, obelisks, hidden graves, Shroud nests, enemy camps, boss unlocks, gold, silver and wooden chests, sarcophagi, treasure fishing spots and more.
+[*][b]Ore map that fills itself:[/b] when a player mines copper, iron, sulfur, flint, crystals or any of 21 deposit kinds, the vein appears on the map with its own icon, who found it and how often it was mined. Shared by everyone, saved across restarts.
+[*][b]Looted chests:[/b] a chest someone opened turns grey with a check mark (with name and date); one switch hides all looted chests.
+[*][b]The game's own map:[/b] drawn from the map data inside the game (height, relief, contour lines, Shroud zones), sharp down to 1 metre per pixel when you zoom in. Only the part you look at is loaded.
+[*][b]Fast:[/b] thousands of markers on one canvas, smooth panning and zooming, also on phones.
+[*][b]Your own map picture:[/b] add any map image as a second style in [i]livemap/maps.json[/i]; a calibration helper lines it up.
+[/list]
+
+[size=4][b]Share the map[/b][/size]
+The mod builds the link for you:
+[list]
+[*][b]Port:[/b] by default the same number as your game port, over TCP. Usually you only set your existing port forwarding to "TCP and UDP" (Docker: add [i]15637:15637/tcp[/i]). Rented servers with a Pterodactyl panel are often open for TCP already.
+[*][b]Address:[/b] the mod finds your public IP by itself. Got a hostname or a tunnel with HTTPS? Set [i]PublicUrl=https://map.example.com[/i].
+[*][b]Key:[/b] random on the first start, or any word you like: [i]Key=ourmap[/i]. Players can then type [i]your-address:15637/ourmap[/i].
+[/list]
+You find the full link in [i]livemap.log[/i] ("map link: ...") to post in your Discord, and the game chat shows it to everyone who joins.
+
+[size=4][b]Installation[/b][/size]
+[b]Windows server[/b]
+[list=1]
+[*]Stop the server.
+[*]Copy [i]iphlpapi.dll[/i] and the [i]livemap[/i] folder into the folder with [i]enshrouded_server.exe[/i].
+[*]Start the server. The mod writes [i]livemap.ini[/i] and [i]livemap.log[/i].
+[*]Open the port from [i]livemap.log[/i] for TCP (see "Share the map").
+[/list]
+[b]Linux / Docker (Wine)[/b]
+[list=1]
+[*]Stop the container.
+[*]Copy [i]iphlpapi.dll[/i] and the [i]livemap[/i] folder next to [i]enshrouded_server.exe[/i].
+[*]Add [i]iphlpapi=n,b[/i] to [i]WINEDLLOVERRIDES[/i] (with Shared XP: [i]WINEDLLOVERRIDES=powrprof=n,b;iphlpapi=n,b[/i]) and publish the TCP port.
+[*]Start the container.
+[/list]
+[b]Check:[/b] [i]livemap.log[/i] shows "map link: http://..." and, after a player joins, the chat shows "Live map: ...". Open the link from outside your network (for example your phone without Wi-Fi).
+
+[b]Uninstall:[/b] stop the server and delete iphlpapi.dll, the livemap folder, livemap.ini and livemap.log.
+
+[size=4][b]Settings[/b][/size] ([i]livemap.ini[/i], restart the server after changes)
+[list]
+[*][b]Port[/b] (default auto): the game's port number over TCP, or a fixed number.
+[*][b]PublicUrl[/b] (empty): your own address, e.g. https://map.example.com. Empty = public IP.
+[*][b]DetectPublicAddress[/b] (1): 0 = never ask for the public IP.
+[*][b]AnnounceInChat[/b] (1): the map link in the chat when a player joins.
+[*][b]Key[/b] (random): 3 to 64 letters, digits, - or _; upper and lower case do not matter.
+[*][b]Finds[/b] (1): ore deposits and looted chests.
+[*][b]UpdateMs[/b] (250): how often the page gets new positions.
+[/list]
+
+[size=4][b]Good to know[/b][/size]
+[list]
+[*]Everyone with the link sees all player positions. Share it with your players only; change the key to lock old links out.
+[*]Without a proxy or tunnel the map is plain HTTP.
+[*]Links in the game chat cannot be clicked or copied: type the short link, or copy the full one from livemap.log.
+[*]The ore map only shows deposits someone has mined on your server; ore veins are part of the terrain and not in the game's marker data.
+[*]A chest counts as looted when someone opens it; a storage chest you build right next to a world chest can mark that chest as well.
+[*]To find its public IP, the server asks api.ipify.org (or icanhazip.com) once an hour unless you set PublicUrl or DetectPublicAddress=0. Nothing else leaves your server.
+[*][b]Safe on game updates:[/b] on an unknown server build the map stays off and the server runs as usual. Wait for an updated version.
+[/list]
+
+[size=4][b]Requirements[/b][/size]
+[list]
+[*]Enshrouded 1.0 dedicated server, Steam builds [b]25988414[/b] and [b]26083076[/b] (October 2026).
+[*]Windows server, or Linux/Docker under Wine (tested with mornedhels/enshrouded-server:1.7.2-wine).
+[*]One TCP port that players can reach (the game port number by default).
+[*]A current web browser for the players.
+[/list]
+
+[size=4][b]Works with[/b][/size]
+Shared XP: both mods add their line to the chat when a player joins and run side by side.
+
+Open source (MIT): [url=https://github.com/oggii/enshrouded-livemap]github.com/oggii/enshrouded-livemap[/url]. Some antivirus tools flag proxy DLLs by heuristics; you can read the code and build the DLL yourself.
+
+[size=4][b]Shout outs[/b][/size]
+[list]
+[*]Keen Games for Enshrouded. Map art and icons © Keen Games.
+[*][url=https://leafletjs.com]Leaflet[/url] for the map view, [url=https://github.com/cursey/safetyhook]SafetyHook[/url] and [url=https://github.com/zyantific/zydis]Zydis[/url] for the hooking.
+[/list]

@@ -1,0 +1,22 @@
+{
+ "bossunlock": "bossunlock.png",
+ "camp": "camp.png",
+ "cave": "cave.png",
+ "crypt": "crypt.png",
+ "dungeon": "dungeon.png",
+ "enemycamp": "enemycamp.png",
+ "farm": "farm.png",
+ "fasttravel": "fasttravel.png",
+ "fognest": "fognest.png",
+ "gemforge": "gemforge.png",
+ "grave": "grave.png",
+ "mine": "mine.png",
+ "nighttemple": "nighttemple.png",
+ "obelisk": "obelisk.png",
+ "questarea": "questarea.png",
+ "shrine": "shrine.png",
+ "spire": "spire.png",
+ "town": "town.png",
+ "vault": "vault.png",
+ "well": "well.png"
+}

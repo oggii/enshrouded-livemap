@@ -1,0 +1,8 @@
+1.0.0 (first release)
+- Live web map served by the dedicated server: players with names, positions and walking direction, in-game time, real time, weather zones.
+- The game's own map, rendered from the map data inside the game: 1 m per pixel when zoomed in, loaded as tiles.
+- About 3,700 markers from the game's own data in 28 categories with the game's icons; each category can be switched on and off.
+- Ore map that fills itself: 21 deposit kinds with their own icons, who found them and how often they were mined; looted chests turn grey.
+- Shareable link: port = the game's port number over TCP, public address found automatically (or PublicUrl), own key words, short link /<key>, link in livemap.log and in the chat when a player joins.
+- Runs side by side with Shared XP.
+- Server builds 25988414 and 26083076; inactive on unknown builds.
