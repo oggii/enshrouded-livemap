@@ -208,6 +208,41 @@ def load_templates(server_dir, names=None):
     return templates
 
 
+# The game's region names are map labels of their own (templates MapLabel_general_Tower_<Region>,
+# a Location with a LocaTag text) placed at each region's Ancient Spire (checked 2026-10-24, build
+# 26083076). A label template with no placed copy (Cinder's Cradle) goes to the middle of the
+# points the game names "... · <Region>".
+REGION_LABEL = re.compile(r"^MapLabel_general_Tower_")
+REGION_TEXT_PREFIX = re.compile(r"^Ancient Spire\s*[\u2014\u2013-]\s*")
+
+
+def load_regions(server_dir, texts, instances):
+    tpls = {}
+    for path in glob.glob(os.path.join(server_dir, "TemplateResource", "*.json")):
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            continue
+        if "MapLabel_general_Tower_" not in text:
+            continue
+        d = json.loads(text)
+        if not REGION_LABEL.match(d.get("name") or ""):
+            continue
+        comps = {c.get("$type"): c.get("$value") or {} for c in d.get("components") or []}
+        tag = (comps.get("keen::ecs::LocaTagComponent") or {}).get("locaTag")
+        name = REGION_TEXT_PREFIX.sub("", texts.by_guid(tag) or "").strip() if tag else ""
+        if name:
+            tpls[d["$guid"]] = ("region", name, d["name"])
+    regions = {label: (x, z) for _, x, _, z, label, _ in load_instances(server_dir, tpls)}
+    for _, name, _ in tpls.values():
+        if name in regions:
+            continue
+        pts = [(x, z) for _, x, _, z, label, _ in instances if (" \u00b7 " + name) in label]
+        if pts:
+            regions[name] = (round(sum(p[0] for p in pts) / len(pts), 1), round(sum(p[1] for p in pts) / len(pts), 1))
+    return sorted([name, x, z] for name, (x, z) in regions.items())
+
+
 def fixed(hi, lo):
     return hi + lo / 65536.0
 
@@ -288,6 +323,9 @@ def main():
     data = {"categories": [{"id": c, "label": l, "color": col, "on": on, "label_default": defaults.get(c, l)}
                            for c, l, col, on in CATEGORIES],
             "pois": pois, "discoveryKeys": discovery}
+    if names:
+        data["regions"] = load_regions(a.server, names[0], instances)
+        print(f"regions: {data['regions']}", file=sys.stderr)
     text = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(text)

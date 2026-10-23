@@ -217,6 +217,7 @@
   let showWeather = (() => { try { return localStorage.getItem("livemap.weather") !== "0"; } catch { return true; } })();
   let showShroud = (() => { try { return localStorage.getItem("livemap.shroud") !== "0"; } catch { return true; } })();
   let showFog = (() => { try { return localStorage.getItem("livemap.fog") === "1"; } catch { return false; } })();
+  let showRegions = (() => { try { return localStorage.getItem("livemap.regions") !== "0"; } catch { return true; } })();
   const layers = {};
 
   function toLatLng(pos) { return L.latLng(pos[2], pos[0]); }
@@ -630,6 +631,37 @@
           }
         }
       }
+      this._regionsDrawn = 0;
+      if (showRegions && rawPoiData && rawPoiData.regions) this._drawRegions(ctx, ox, oy, sx, sy, X0, Y0, W, H);
+    },
+    // The game's region names (pois.json "regions": its MapLabel_general_Tower_* labels at each
+    // region's Ancient Spire) in spaced capitals, as on the game's map: large when zoomed out,
+    // fading away from zoom -1 on, where the places themselves carry the names.
+    _drawRegions(ctx, ox, oy, sx, sy, X0, Y0, W, H) {
+      const z = this._map.getZoom(), alpha = Math.max(0, Math.min(1, (-0.5 - z) / 1.25));
+      this._regionsDrawn = 0;
+      if (alpha <= 0) return;
+      const size = Math.round(Math.max(15, Math.min(30, 30 + (z + 2) * 8)));
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = "600 " + size + "px Alegreya, Georgia, serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      if ("letterSpacing" in ctx) ctx.letterSpacing = (size * 0.3).toFixed(1) + "px";
+      ctx.lineJoin = "round"; ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = "rgba(10, 8, 14, 0.82)";
+      ctx.fillStyle = "#f6e7c6";
+      // Under the spire icon, or above it when that would run into a name already drawn.
+      const placed = [], hits = (l, t, r, b) => placed.some(q => l < q[2] && r > q[0] && t < q[3] && b > q[1]);
+      for (const [name, wx, wz] of rawPoiData.regions) {
+        const x = ox + wx * sx, sy0 = oy + wz * sy;
+        if (x < X0 - 300 || x > W + 300 || sy0 < Y0 - 50 || sy0 > H + 50) continue;
+        const t = name.toUpperCase(), half = ctx.measureText(t).width / 2 + 6;
+        let y = sy0 + 16;
+        if (hits(x - half, y, x + half, y + size)) y = sy0 - 16 - size;
+        ctx.strokeText(t, x, y); ctx.fillText(t, x, y);
+        placed.push([x - half, y, x + half, y + size]);
+        this._regionsDrawn++;
+      }
+      ctx.restore();
     },
     _hover(e) {
       const h = this._hits;
@@ -825,13 +857,18 @@
     const fb = fg.querySelector("input");
     fb.checked = showFog;
     fb.onchange = () => { setFogShown(fb.checked); };
-    list.prepend(wxHead, wx, sh, fg);
+    const rg = document.createElement("label");
+    rg.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#f6e7c6"></span><span class="t">Region names</span>';
+    const rb = rg.querySelector("input");
+    rb.checked = showRegions;
+    rb.onchange = () => { showRegions = rb.checked; try { localStorage.setItem("livemap.regions", showRegions ? "1" : "0"); } catch {} poiLayer.schedule(); };
+    list.prepend(wxHead, wx, sh, fg, rg);
     shroudLabel();
     const dHead = document.createElement("div"); dHead.className = "group"; dHead.textContent = "Discovered";
     const dRow = document.createElement("div"); dRow.className = "disc";
     dRow.innerHTML = '<select id="discMode"><option value="all">All places</option><option value="known">Discovered</option>'
       + '<option value="unknown">Not discovered</option></select><select id="discBy"></select><span class="disc-note" id="discNote"></span>';
-    fg.after(dHead, dRow);
+    rg.after(dHead, dRow);
     const modeSel = dRow.querySelector("#discMode"), bySel = dRow.querySelector("#discBy");
     modeSel.value = discMode;
     modeSel.onchange = () => { discMode = modeSel.value; try { localStorage.setItem("livemap.discMode", discMode); } catch {} poiLayer.invalidate(); };
@@ -1430,7 +1467,7 @@
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
   window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode,
-    explored: (x, z) => exploredAt(x, z), exp: () => EXP,
+    explored: (x, z) => exploredAt(x, z), exp: () => EXP, regions: () => rawPoiData && rawPoiData.regions,
     fogAlpha(x, z) {
       if (!fog.cur) return null;
       const n = fog.canvas.width, col = Math.floor(x / 10240 * n), row = Math.floor(z / 10240 * n);

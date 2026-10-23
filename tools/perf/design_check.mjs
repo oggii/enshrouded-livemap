@@ -2,7 +2,7 @@
 // /events (two players, one walking, weather from fixtures/weather-sample.json), /discovered and
 // /explored, headless.
 //   node tools/perf/design_check.mjs [out dir for screenshots] [web dir]
-// Per screen size (390x844, 768x1024, 1440x900, 1920x1080), with the marker panel open:
+// Per screen size (390x844, 768x1024, 1440x900, 1920x1080, 2560x1311), with the marker panel open:
 //   - no sideways page scroll, every panel inside the screen, no two panels on top of each other;
 //   - every visible text: WCAG contrast against what is behind it, its panels composited over the
 //     darkest and the lightest map colour (worst case); 4.5:1, or 3:1 for large text (24 px, or
@@ -136,7 +136,7 @@ const measure = () => {
   return { scrollX: document.documentElement.scrollWidth - vw, outside, overlaps, texts, low, halo: halo.length };
 };
 
-for (const [w, h] of process.env.PERF_ONLY ? [] : [[390, 844], [768, 1024], [1440, 900], [1920, 1080]]) {
+for (const [w, h] of process.env.PERF_ONLY ? [] : [[390, 844], [768, 1024], [1440, 900], [1920, 1080], [2560, 1311]]) {
   const { page, errors } = await open(w, h);
   const m = await page.evaluate(measure);
   if (out) await page.screenshot({ path: path.join(out, `${w}x${h}.png`) });
@@ -165,6 +165,18 @@ for (const [w, h] of process.env.PERF_ONLY ? [] : [[390, 844], [768, 1024], [144
   const tip = await page.evaluate(() => { const t = document.querySelector(".poi-tip"); return t ? t.textContent : ""; });
   check("hover after a pan names the marker under the cursor", !!target && tip.startsWith(target.name), `"${target && target.name}" -> "${tip.slice(0, 60)}"`);
   check("no page errors (hover)", !errors.length, errors.join(" | ") || "none");
+  await page.close();
+}
+
+// Region names: all nine when the whole world is in view, none once zoomed in to places.
+{
+  const { page, errors } = await open(1920, 1080);
+  const at = z => page.evaluate(z => new Promise(r => { const m = window.livemap.map; m.setView([5120, 5120], z, { animate: false });
+    setTimeout(() => { window.livemap.poiLayer.redraw(); r(window.livemap.poiLayer._regionsDrawn); }, 300); }), z);
+  const total = await page.evaluate(() => (window.livemap.discovered.regions() || []).length);
+  const far = await at(-3), near = await at(0.5);
+  check("region names: all when zoomed out, none when zoomed in", total >= 9 && far === total && near === 0, `${far} of ${total} at zoom -3, ${near} at zoom 0.5`);
+  check("no page errors (regions)", !errors.length, errors.join(" | ") || "none");
   await page.close();
 }
 

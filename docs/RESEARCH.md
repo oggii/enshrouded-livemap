@@ -415,3 +415,22 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   player name (512 x 512 bits, livemap/explored.json, /explored); the page adds 300 m around each
   place the player discovered in the game and draws the rest dark. The Discovered filter uses the
   game's keys where a place has one and this explored area for everything else.
+
+## 19. Region names and the game's UI look (24 Oct 2026)
+
+- Region names are map labels of their own: templates `MapLabel_general_Tower_<Region>` with
+  `keen::ecs::Location`, `LocaTagComponent` (the name) and `MapMarker` (type cf788a1f), placed at
+  each region's Ancient Spire, about 25 m south of it. Build 26083076 places eight: Springlands,
+  Low Meadows, Revelwood, Blackmire (text "Ancient Spire — Blackmire"), Veilwater Basin, Nomad
+  Highlands, Albaneve Summits, Kindlewastes. `MapLabel_general_Tower_AncientLands` (Cinder's
+  Cradle) has no placed copy; the map puts it at the middle of the points the game names
+  "... · Cinder's Cradle". `tools/extract_pois.py` writes them to pois.json `regions`.
+- The biome map (`keen::BiomeMapResource`, 1280 x 1280 cells of 8 m, row 0 = south; enum
+  Grassland, Desert, Wetland, Steppes, Deepforest, ColdHeights, TallTrees, AncientLand) is coarser
+  than the regions: Springlands and Low Meadows are both Grassland.
+- The game's UI font is Harmonique Display (commercial, not shipped); other scripts use Noto Serif.
+  The page uses Alegreya, the closest free match. Frame, separators, pattern and player arrow
+  come from the client's UiTextureResource (`fancy_box_frame_full`, `separator_line_horizontal`,
+  `hairline_horizontal`, `fancy_box_background_pattern`, `player_position`) via
+  `tools/kfc_content.py`.
+

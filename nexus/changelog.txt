@@ -1,3 +1,14 @@
+1.7.0 (not released yet)
+- The page now wears the game's own map-screen look: the gold frame, separators and player arrow
+  from the game files, Alegreya type, diamond switches, a compass rose and a metre scale. Player
+  arrows keep their colour. On phones the clock shrinks to the time and the marker panel opens
+  as a sheet from the bottom.
+- Region names: the game's own region labels (Springlands, Revelwood, Kindlewastes ...) in large
+  letters when zoomed out, with their own switch under Overlays.
+- Panning is smoother: the markers are drawn with a margin and only move while you pan.
+- Ore map: clay pits count as deposits.
+  Needs the server part (iphlpapi.dll) of 1.7.0 for clay.
+
 1.6.0
 - Fog of war: a new overlay darkens everything the chosen player (or nobody) has explored yet.
   The game keeps its real fog in the character save on each player's PC, so the map builds its
