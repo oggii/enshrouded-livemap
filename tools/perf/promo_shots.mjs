@@ -1,7 +1,9 @@
 // Gallery pictures for Nexus: the real page and map with sample players, finds and altars
 // (stub data, no game server), each with gold callouts that point at what it shows.
-//   node tools/perf/promo_shots.mjs <out dir> <shroud points.json>
+//   node tools/perf/promo_shots.mjs <out dir> <shroud points.json> [--hd]
 // Writes NN-name.jpg at 1920 x 1080 and titles.json ({file: title}) for `nexus image-add`.
+// --hd: the pictures with the optional HD map style instead (package/hd/maps.json, the tiles
+// from local-maps/tiles-hd, which only the maintainer has).
 // shroud points.json: {"<level>": {"x": .., "z": ..}} as for shroud_check.mjs.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
@@ -12,6 +14,8 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [outDir, shroudPointsFile] = process.argv.slice(2);
+const hd = process.argv.includes("--hd");
+const repo = path.join(here, "../..");
 const web = path.join(here, "../..", "web");
 fs.mkdirSync(outDir, { recursive: true });
 const weather = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "weather-sample.json"), "utf8"));
@@ -64,7 +68,10 @@ const server = http.createServer((req, res) => {
   }
   const stub = { "/state": state(), "/finds": finds, "/bases": bases, "/discovered": discovered, "/explored": explored }[u.pathname];
   if (stub) { res.writeHead(200, { "Content-Type": "application/json" }); res.end(stub); return; }
-  const file = path.join(web, u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname));
+  const rel = decodeURIComponent(u.pathname);
+  const file = hd && rel === "/maps.json" ? path.join(repo, "package", "hd", "maps.json")
+    : hd && rel.startsWith("/tiles-hd/") ? path.join(repo, "local-maps", rel)
+    : path.join(web, rel === "/" ? "index.html" : rel);
   fs.readFile(file, (e, d) => { if (e) { res.writeHead(404); res.end(); } else { res.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream" }); res.end(d); } });
 });
 await new Promise(r => server.listen(0, "127.0.0.1", r));
@@ -146,6 +153,7 @@ async function compose(name, title, shot, callouts, inset) {
 const titles = {};
 const allCats = JSON.stringify(Object.fromEntries(pois.categories.map(c => [c.id, true])));
 
+if (!hd) {
 // 1. Overview: the game's look and region names.
 {
   const s = await raw(1920, 1080, {}, [5600, 5050, -3.05], async page => ({
@@ -227,6 +235,43 @@ const allCats = JSON.stringify(Object.fromEntries(pois.categories.map(c => [c.id
     { isNew: true, text: "Drag a panel by its title; your browser remembers where", at: [900, 300], to: s.targets.players },
     { isNew: true, text: "Phones get their own layout", at: [600, 960], to: [532, 900] },
   ], { png: phone.png, x: 140, y: 120, w: 390 * 0.95 });
+}
+} else {
+const HD = { "livemap.style": "HD" };
+const styleSwitch = page => page.evaluate(() => { const r = document.querySelector(".leaflet-control-layers").getBoundingClientRect(); return [r.right, r.top + r.height / 2]; });
+// 7. The whole world in the HD style.
+{
+  const s = await raw(1920, 1080, HD, [5600, 5050, -3.05], async page => ({ hd: await styleSwitch(page), region: await worldPx(page, 6766, 3764) }));
+  await compose("07-hd-overview", "Optional HD map style: the whole world with its region names", s, [
+    { tag: "OPTIONAL FILE", text: "HD map style: switch between the game map and HD at any time", at: [60, 700], to: s.targets.hd },
+    { isNew: true, text: "Region names on the HD map too", at: [1390, 745], to: [s.targets.region[0] + 150, s.targets.region[1] + 30] },
+  ]);
+}
+// 8. Players and weather in HD.
+{
+  const s = await raw(1920, 1080, { ...HD, "livemap.pois": allCats }, [3700, 4330, -0.6], async page => {
+    await page.evaluate(() => [...document.querySelectorAll("#playerList li")].find(li => /Brom/.test(li.textContent)).click());
+    await page.waitForTimeout(600);
+    return { kesh: await worldPx(page, 3880, 4420), rain: await worldPx(page, 3300, 4700), hd: await styleSwitch(page) };
+  });
+  await compose("08-hd-players", "HD map style: players live, following and the weather", s, [
+    { isNew: true, text: "Each player's arrow in their own colour", at: [1250, 170], to: [s.targets.kesh[0] + 6, s.targets.kesh[1] - 6] },
+    { text: "Rain and snow exactly where they fall", at: [240, 640], to: s.targets.rain },
+  ]);
+}
+// 9. Finds in HD.
+{
+  const s = await raw(1920, 1080, { ...HD, "livemap.pois": allCats }, [3660, 4360, 0], async page => {   // HD is sharp up to zoom 0
+    const clay = await worldPx(page, 3770, 4465);
+    await page.mouse.move(clay[0], clay[1]);
+    await page.waitForTimeout(400);
+    return { clay, altar: await worldPx(page, 3720, 4330) };
+  });
+  await compose("09-hd-finds", "HD map style: ore veins, looted chests and Flame Altars", s, [
+    { isNew: true, text: "Clay pits now count as deposits", at: [s.targets.clay[0] + 120, s.targets.clay[1] + 120], to: [s.targets.clay[0] + 4, s.targets.clay[1] + 8] },
+    { text: "Your Flame Altars with their build zone", at: [1150, 160], to: s.targets.altar },
+  ]);
+}
 }
 fs.writeFileSync(path.join(outDir, "titles.json"), JSON.stringify(titles, null, 2));
 console.log("wrote", Object.keys(titles).join(", "));
