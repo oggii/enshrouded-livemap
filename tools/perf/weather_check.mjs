@@ -21,7 +21,7 @@ const server = http.createServer(async (req, res) => {
     const send = async () => { const s = await fetchText("/state"); if (s) res.write("data: " + s + "\n\n"); };
     send(); const t = setInterval(send, 1000); req.on("close", () => clearInterval(t)); return;
   }
-  if (["/state", "/finds", "/bases"].includes(u.pathname)) {
+  if (["/state", "/finds", "/bases", "/discovered", "/explored"].includes(u.pathname)) {
     const s = await fetchText(u.pathname);
     res.writeHead(s ? 200 : 404, { "Content-Type": "application/json" }); res.end(s || ""); return;
   }

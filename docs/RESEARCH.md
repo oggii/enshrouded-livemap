@@ -411,3 +411,7 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   into fog found no grid that gained the flown path.
 - The reveal radius is game data: player templates carry `ecs::FogOfWarDiscovery`
   {discoveryRange 300 m} (1_Player, 1_Player_AG2, AutomatedPlayer).
+- The map's own fog (1.6): the DLL marks 20 m cells within 300 m of every position it sees, per
+  player name (512 x 512 bits, livemap/explored.json, /explored); the page adds 300 m around each
+  place the player discovered in the game and draws the rest dark. The Discovered filter uses the
+  game's keys where a place has one and this explored area for everything else.

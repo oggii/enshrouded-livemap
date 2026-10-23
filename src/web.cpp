@@ -160,6 +160,10 @@ void handle(SOCKET s) {
         send_response(s, "200 OK", "application/json", world::store().to_json());
         return;
     }
+    if (path == "/explored") {
+        send_response(s, "200 OK", "application/json", world::explored_store().to_json());
+        return;
+    }
     if (path == "/discovered") {
         send_response(s, "200 OK", "application/json", world::discovered_store().to_json());
         return;

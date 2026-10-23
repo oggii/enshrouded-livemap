@@ -97,7 +97,7 @@ stops the IP lookup entirely.
 | `UpdateMs` | `250` | How often the page gets new positions (100 to 5000). |
 | `Finds` | `1` | Ore deposits and opened chests on the map. |
 | `Bases` | `1` | The players' Flame Altars on the map. |
-| `Discovered` | `1` | Which places each player discovered (marker panel filter). |
+| `Discovered` | `1` | Which places each player discovered and where they have been (filter and fog of war). |
 | `Log`, `LogDiagnostics` | `1` | Log file and periodic diagnostics. |
 
 ## The map

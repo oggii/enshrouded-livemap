@@ -132,6 +132,7 @@
   let lastState = null, config = null, currentStyle = null;
   let showWeather = (() => { try { return localStorage.getItem("livemap.weather") !== "0"; } catch { return true; } })();
   let showShroud = (() => { try { return localStorage.getItem("livemap.shroud") !== "0"; } catch { return true; } })();
+  let showFog = (() => { try { return localStorage.getItem("livemap.fog") === "1"; } catch { return false; } })();
   const layers = {};
 
   function toLatLng(pos) { return L.latLng(pos[2], pos[0]); }
@@ -705,17 +706,22 @@
     const sb = sh.querySelector("input");
     sb.checked = showShroud;
     sb.onchange = () => { setShroudShown(sb.checked); };
-    list.prepend(wxHead, wx, sh);
+    const fg = document.createElement("label");
+    fg.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#2a2236;border:1px solid #6a5a80"></span><span class="t">Fog of war (by the player chosen below)</span>';
+    const fb = fg.querySelector("input");
+    fb.checked = showFog;
+    fb.onchange = () => { setFogShown(fb.checked); };
+    list.prepend(wxHead, wx, sh, fg);
     shroudLabel();
     const dHead = document.createElement("div"); dHead.className = "group"; dHead.textContent = "Discovered";
     const dRow = document.createElement("div"); dRow.className = "disc";
     dRow.innerHTML = '<select id="discMode"><option value="all">All places</option><option value="known">Discovered</option>'
       + '<option value="unknown">Not discovered</option></select><select id="discBy"></select><span class="disc-note" id="discNote"></span>';
-    sh.after(dHead, dRow);
+    fg.after(dHead, dRow);
     const modeSel = dRow.querySelector("#discMode"), bySel = dRow.querySelector("#discBy");
     modeSel.value = discMode;
     modeSel.onchange = () => { discMode = modeSel.value; try { localStorage.setItem("livemap.discMode", discMode); } catch {} poiLayer.invalidate(); };
-    bySel.onchange = () => { discBy = bySel.value; try { localStorage.setItem("livemap.discBy", discBy); } catch {} poiLayer.invalidate(); };
+    bySel.onchange = () => { discBy = bySel.value; try { localStorage.setItem("livemap.discBy", discBy); } catch {} discInvalidate(); drawFog(); poiLayer.invalidate(); };
     discPanel();
     document.getElementById("poiAll").onclick = () => {
       const boxes = [...list.querySelectorAll("input:not([data-extra])")];
@@ -732,6 +738,7 @@
     applyBases(data, basesData);
     applyFinds(data, findsData);
     poiData = data;
+    discInvalidate();
     preparePois(data);
     renderPoiPanel(data);
     poiLayer.invalidate();
@@ -767,14 +774,28 @@
   let DISC = null, discVersion = -1, discFetching = false;
   let discMode = (() => { try { return localStorage.getItem("livemap.discMode") || "all"; } catch { return "all"; } })();
   let discBy = (() => { try { return localStorage.getItem("livemap.discBy") || ""; } catch { return ""; } })();
-  function discNames() { return DISC ? (discBy && DISC.players[discBy] ? [discBy] : Object.keys(DISC.players)) : []; }
+  // The chosen players and their combined explored grid are cached; discInvalidate() after new
+  // data or another choice (the marker loop asks for every point on every redraw).
+  let discNamesCache = null;
+  function discInvalidate() { discNamesCache = null; expGrid = null; }
+  function discNames() {
+    if (discNamesCache) return discNamesCache;
+    const all = new Set([...Object.keys(DISC ? DISC.players : {}), ...Object.keys(EXP ? EXP.players : {})]);
+    discNamesCache = discBy && all.has(discBy) ? [discBy] : [...all];
+    return discNamesCache;
+  }
+  // Places with a discovery key: the game's own state. Everything else (shrines, chests, ...):
+  // discovered when it lies in the area the chosen player(s) explored. Finds and altars: never
+  // filtered (players made them).
   function discKnown(p) {
-    if (!DISC || p.k === undefined) return null;
-    return discNames().some(n => DISC.players[n].keys.has(p.k));
+    if (p.isFind || (p[5] && p[5].base)) return null;
+    if (p.k !== undefined) return DISC ? discNames().some(n => DISC.players[n] && DISC.players[n].keys.has(p.k)) : null;
+    return EXP ? exploredAt(p[1], p[3]) : null;
   }
   function discHidden(p) {
-    if (discMode === "all" || p.k === undefined || !DISC || !Object.keys(DISC.players).length) return false;
-    return discMode === "known" ? !discKnown(p) : discKnown(p);
+    if (discMode === "all" || !discNames().length) return false;
+    const known = discKnown(p);
+    return known === null ? false : discMode === "known" ? !known : known;
   }
   function discText(p) {
     if (!DISC || p.k === undefined || !Object.keys(DISC.players).length) return "";
@@ -784,16 +805,73 @@
   function discPanel() {
     const bySel = document.getElementById("discBy"), note = document.getElementById("discNote");
     if (!bySel) return;
-    const names = DISC ? Object.keys(DISC.players).sort() : [];
+    const names = [...new Set([...Object.keys(DISC ? DISC.players : {}), ...Object.keys(EXP ? EXP.players : {})])].sort();
+    const online = n => DISC && DISC.players[n] ? DISC.players[n].online : false;
     const want = ['<option value="">by anyone</option>'].concat(names.map(n =>
       '<option value="' + n.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + '">by ' + n.replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      + (DISC.players[n].online ? "" : " (offline)") + "</option>")).join("");
-    if (bySel.innerHTML !== want) { bySel.innerHTML = want; bySel.value = DISC && DISC.players[discBy] ? discBy : ""; }
-    const count = Object.keys((rawPoiData && rawPoiData.discoveryKeys) || {}).length;
-    note.textContent = !DISC ? "Needs the server part 1.5." : !names.length ? "Nobody has played since the update."
-      : count + " places know their discovery; others always show.";
-    document.getElementById("discMode").disabled = !DISC || !names.length;
-    bySel.disabled = !DISC || !names.length;
+      + (online(n) ? "" : " (offline)") + "</option>")).join("");
+    if (bySel.innerHTML !== want) { bySel.innerHTML = want; bySel.value = names.includes(discBy) ? discBy : ""; }
+    note.textContent = !DISC && !EXP ? "Needs the server part 1.6." : !names.length ? "Nobody has played since the update."
+      : "Towns, dungeons, camps ... use the game's own state; everything else counts within 300 m of where that player has been.";
+    document.getElementById("discMode").disabled = !names.length;
+    bySel.disabled = !names.length;
+  }
+  // Explored area (/explored): per player a 512 x 512 grid of 20 m cells (row 0 = south), set
+  // within 300 m of every position the server saw. The map adds 300 m around each place a player
+  // discovered, which covers the time before the update. The combined grid follows the "by"
+  // choice and is rebuilt when the data or the choice changes.
+  let EXP = null, expVersion = -1, expFetching = false, expLast = 0, expGrid = null, expGridFor = "";
+  const EXP_RADIUS = 300;
+  function exploredGrid() {
+    if (expGrid) return expGrid;
+    const names = discNames(), id = names.join("|") + "#" + expVersion + "#" + discVersion;
+    const n = EXP ? EXP.cells : 512, cell = EXP ? EXP.cellMetres : 20, g = new Uint8Array(n * n);
+    for (const name of names) {
+      const bits = EXP && EXP.players[name];
+      if (bits) for (let i = 0; i < n * n; i++) if (bits[i >> 3] >> (i & 7) & 1) g[i] = 1;
+    }
+    if (DISC && poiData) {
+      const r = Math.ceil(EXP_RADIUS / cell);
+      for (const p of poiData.pois) {
+        if (p.k === undefined || !names.some(nm => DISC.players[nm] && DISC.players[nm].keys.has(p.k))) continue;
+        const cx = Math.floor(p[1] / cell), cz = Math.floor(p[3] / cell);
+        for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+          const col = cx + dx, row = cz + dz;
+          if (col < 0 || row < 0 || col >= n || row >= n) continue;
+          const mx = (col + 0.5) * cell - p[1], mz = (row + 0.5) * cell - p[3];
+          if (mx * mx + mz * mz <= EXP_RADIUS * EXP_RADIUS) g[row * n + col] = 1;
+        }
+      }
+    }
+    expGrid = { n, cell, g };
+    expGridFor = id;
+    return expGrid;
+  }
+  function exploredAt(x, z) {
+    const { n, cell, g } = exploredGrid();
+    const col = Math.floor(x / cell), row = Math.floor(z / cell);
+    return col >= 0 && row >= 0 && col < n && row < n && g[row * n + col] === 1;
+  }
+  function maybeRefreshExplored(version) {
+    const now = Date.now();
+    if (version === undefined || version === expVersion || expFetching || now - expLast < 15000) return;
+    expFetching = true;
+    expLast = now;
+    fetch("explored" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      const players = {};
+      for (const [name, b64] of Object.entries(d.players || {})) {
+        const s = atob(b64), bits = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) bits[i] = s.charCodeAt(i);
+        players[name] = bits;
+      }
+      EXP = { cells: d.cells, cellMetres: d.cellMetres, players };
+      expVersion = d.version;
+      discInvalidate();
+      discPanel();
+      drawFog();
+      poiLayer.invalidate();
+    }).catch(() => {}).finally(() => { expFetching = false; });
   }
   function maybeRefreshDiscovered(version) {
     if (version === undefined || version === discVersion || discFetching) return;
@@ -804,7 +882,9 @@
       for (const [name, v] of Object.entries(d.players || {})) players[name] = { online: v.online, at: v.at, keys: new Set(v.keys) };
       DISC = { players };
       discVersion = d.version;
+      discInvalidate();
       discPanel();
+      drawFog();
       poiLayer.invalidate();
     }).catch(() => {}).finally(() => { discFetching = false; });
   }
@@ -1109,6 +1189,42 @@
     }).catch(() => {});
   if (showShroud) shroudOverlay.addTo(map);
 
+  // Fog of war: the explored grid of the chosen player(s) as a dark veil over unexplored land,
+  // in its own pane above the shroud and below weather and markers.
+  map.createPane("fog").style.zIndex = 395;
+  map.getPane("fog").style.pointerEvents = "none";
+  const fogOverlay = L.imageOverlay("data:image/gif;base64,R0lGODlhAQABAAAAACw=", [[0, 0], [10240, 10240]],
+    { pane: "fog", interactive: false });
+  let fogDrawnFor = "";
+  function drawFog() {
+    if (!showFog || (!EXP && !DISC)) return;
+    const { n, g } = exploredGrid();
+    if (fogDrawnFor === expGridFor) return;
+    fogDrawnFor = expGridFor;
+    const c = document.createElement("canvas");
+    c.width = c.height = n;
+    const ctx = c.getContext("2d"), img = ctx.createImageData(n, n), px = img.data;
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) {
+        if (g[row * n + col]) continue;
+        const i = 4 * ((n - 1 - row) * n + col);   // image row 0 = north
+        px[i] = 18; px[i + 1] = 14; px[i + 2] = 26; px[i + 3] = 190;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    c.toBlob(b => {
+      const old = fogOverlay._url;
+      fogOverlay.setUrl(URL.createObjectURL(b));
+      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
+    });
+  }
+  function setFogShown(on) {
+    showFog = on;
+    try { localStorage.setItem("livemap.fog", on ? "1" : "0"); } catch {}
+    if (on) { fogDrawnFor = ""; fogOverlay.addTo(map); drawFog(); } else fogOverlay.remove();
+  }
+  if (showFog) fogOverlay.addTo(map);
+
   const weatherLayer = new WeatherLayer();
   function setWeatherShown(on) {
     showWeather = on;
@@ -1122,7 +1238,8 @@
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
-  window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode };
+  window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode,
+    explored: (x, z) => exploredAt(x, z), exp: () => EXP };
   window.livemap.shroud = { levelAt: (x, z) => shroudLevelAt(x, z), flame: () => flameLevel(), ready: () => !!SHROUD && shroudFlame === flameLevel() };
   window.livemap.weather = {
     state: () => lastState,
@@ -1162,6 +1279,7 @@
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
     maybeRefreshDiscovered(state.discoveredVersion);
+    maybeRefreshExplored(state.exploredVersion);
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     weatherLayer.update(state.weather);
     drawShroud();

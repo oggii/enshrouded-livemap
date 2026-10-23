@@ -62,6 +62,7 @@ SafetyHookMid g_bases_hook;
 finds::Store g_finds;
 bases::Store g_bases;
 discovered::Store g_discovered;
+explored::Store g_explored;
 bool g_discovered_off = false;  // layout not recognised once: stop looking
 
 // Per-player dynamic knowledge (docs/RESEARCH.md section 17, build 26083076): the player
@@ -508,6 +509,23 @@ void append_weather(std::string& out) {
 finds::Store& store() { return g_finds; }
 bases::Store& bases_store() { return g_bases; }
 discovered::Store& discovered_store() { return g_discovered; }
+explored::Store& explored_store() { return g_explored; }
+
+void refresh_explored() {
+    const uint64_t now = GetTickCount64();
+    for (int i = 0; i < kSlotCount; ++i) {
+        const Slot& s = g_slots[i];
+        const uint64_t seen = s.seen_ms.load(std::memory_order_relaxed);
+        if (s.entity.load(std::memory_order_relaxed) == 0 || seen == 0 || now - seen > 5000) continue;
+        std::string name;
+        {
+            std::lock_guard lock(g_names_mutex);
+            name = g_names[i];
+        }
+        if (name.empty()) continue;
+        g_explored.reveal(name, meters(s.x.load(std::memory_order_relaxed)), meters(s.z.load(std::memory_order_relaxed)));
+    }
+}
 
 void refresh_discovered(int64_t unix_now) {
     uintptr_t manager = g_manager.load(std::memory_order_relaxed);
@@ -721,7 +739,8 @@ std::string snapshot_json() {
     out += ",\"basesVersion\":" + std::to_string(g_bases.version(GetTickCount64()));
     const int flame = g_flame_level.load(std::memory_order_relaxed);
     out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null"));
-    out += ",\"discoveredVersion\":" + std::to_string(g_discovered.version()) + "}";
+    out += ",\"discoveredVersion\":" + std::to_string(g_discovered.version());
+    out += ",\"exploredVersion\":" + std::to_string(g_explored.version()) + "}";
     return out;
 }
 

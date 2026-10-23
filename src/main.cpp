@@ -81,6 +81,28 @@ void start_link(const livemap::Config& config) {
     }).detach();
 }
 
+bool read_file(const std::wstring& path, std::string& text) {
+    text.clear();
+    FILE* f = _wfopen(path.c_str(), L"rb");
+    if (!f) return false;
+    char buf[65536];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) text.append(buf, n);
+    std::fclose(f);
+    return true;
+}
+
+// Written to a temp file and renamed into place, so a crash never leaves half a file.
+bool write_file_atomic(const std::wstring& path, const std::string& text) {
+    const std::wstring tmp = path + L".tmp";
+    bool ok = false;
+    if (FILE* f = _wfopen(tmp.c_str(), L"wb")) {
+        ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
+        std::fclose(f);
+    }
+    return ok && MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+}
+
 // Asks the server itself, like Steam's server browser does (A2S_INFO on the game's query port), for
 // the keywords that start with the world's Flame level. -1 when there is no answer.
 int query_flame_level(int port) {
@@ -161,12 +183,8 @@ DWORD WINAPI start(LPVOID) {
     else livemap::log("Flame Altars off in livemap.ini (Bases=0)");
     if (config.chat_probe) livemap::world::enable_chat_probe(targets);
     const std::wstring finds_path = dir + L"\\livemap\\finds.json";
-    if (FILE* f = _wfopen(finds_path.c_str(), L"rb")) {
-        std::string text;
-        char buf[65536];
-        size_t n;
-        while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) text.append(buf, n);
-        std::fclose(f);
+    std::string text;
+    if (read_file(finds_path, text)) {
         if (livemap::world::store().from_json(text)) {
             livemap::log("finds: %zu ore deposits, %zu chests loaded", livemap::world::store().deposits(),
                          livemap::world::store().chests());
@@ -175,22 +193,20 @@ DWORD WINAPI start(LPVOID) {
         }
     }
     const std::wstring discovered_path = dir + L"\\livemap\\discovered.json";
+    const std::wstring explored_path = dir + L"\\livemap\\explored.json";
     if (config.discovered) {
-        if (FILE* f = _wfopen(discovered_path.c_str(), L"rb")) {
-            std::string text;
-            char buf[65536];
-            size_t n;
-            while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) text.append(buf, n);
-            std::fclose(f);
-            if (livemap::world::discovered_store().from_json(text)) {
-                livemap::log("discovered: %zu players loaded", livemap::world::discovered_store().players());
-            }
+        if (read_file(discovered_path, text) && livemap::world::discovered_store().from_json(text)) {
+            livemap::log("discovered: %zu players loaded", livemap::world::discovered_store().players());
+        }
+        if (read_file(explored_path, text) && livemap::world::explored_store().from_json(text)) {
+            livemap::log("explored: %zu players loaded", livemap::world::explored_store().players());
         }
     } else {
-        livemap::log("discovered markers off in livemap.ini (Discovered=0)");
+        livemap::log("discovered places and explored area off in livemap.ini (Discovered=0)");
     }
     uint64_t discovered_saved = livemap::world::discovered_store().version();
-    uint64_t last_discovered = 0;
+    uint64_t explored_saved = livemap::world::explored_store().version();
+    uint64_t last_discovered = 0, last_explored = 0, last_explored_save = 0;
     uint64_t saved_version = livemap::world::store().version();
     uint64_t last_save = 0;
     if (!livemap::web::start(config, dir, error)) {
@@ -211,30 +227,26 @@ DWORD WINAPI start(LPVOID) {
         if (now - last_save >= 5'000 && livemap::world::store().version() != saved_version) {
             last_save = now;
             uint64_t version = livemap::world::store().version();
-            std::string text = livemap::world::store().to_json();
-            std::wstring tmp = finds_path + L".tmp";
-            bool ok = false;
-            if (FILE* f = _wfopen(tmp.c_str(), L"wb")) {
-                ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
-                std::fclose(f);
-            }
-            if (ok && MoveFileExW(tmp.c_str(), finds_path.c_str(), MOVEFILE_REPLACE_EXISTING)) saved_version = version;
+            if (write_file_atomic(finds_path, livemap::world::store().to_json())) saved_version = version;
             else livemap::log("finds: could not write livemap\\finds.json (error %lu), will retry", GetLastError());
         }
-        // Discovered markers: read every 5 s, saved the same way when they changed.
+        // Discovered places: read every 5 s, saved the same way when they changed.
         if (config.discovered && now - last_discovered >= 5'000) {
             last_discovered = now;
             livemap::world::refresh_discovered(static_cast<int64_t>(std::time(nullptr)));
             const uint64_t version = livemap::world::discovered_store().version();
-            if (version != discovered_saved) {
-                const std::string text = livemap::world::discovered_store().to_json();
-                const std::wstring tmp = discovered_path + L".tmp";
-                bool ok = false;
-                if (FILE* f = _wfopen(tmp.c_str(), L"wb")) {
-                    ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
-                    std::fclose(f);
-                }
-                if (ok && MoveFileExW(tmp.c_str(), discovered_path.c_str(), MOVEFILE_REPLACE_EXISTING)) discovered_saved = version;
+            if (version != discovered_saved && write_file_atomic(discovered_path, livemap::world::discovered_store().to_json())) {
+                discovered_saved = version;
+            }
+        }
+        // Explored area: every second around each player, saved at most every 30 s.
+        if (config.discovered && now - last_explored >= 1'000) {
+            last_explored = now;
+            livemap::world::refresh_explored();
+            const uint64_t version = livemap::world::explored_store().version();
+            if (version != explored_saved && now - last_explored_save >= 30'000) {
+                last_explored_save = now;
+                if (write_file_atomic(explored_path, livemap::world::explored_store().to_json())) explored_saved = version;
             }
         }
         if (config.log_diagnostics && now - last_diag >= 30'000) {

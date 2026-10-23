@@ -7,6 +7,7 @@
 
 #include "bases.h"
 #include "discovered.h"
+#include "explored.h"
 #include "finds.h"
 #include "scan.h"
 
@@ -26,6 +27,9 @@ std::string snapshot_json();
 // saves it, web.cpp serves it.
 discovered::Store& discovered_store();
 void refresh_discovered(int64_t unix_now);
+// Where each player has been (300 m around every position seen); main.cpp calls it once a second.
+explored::Store& explored_store();
+void refresh_explored();
 
 // The world's Flame level as the server reports it to Steam (-1 = not known yet); main.cpp sets it.
 void set_flame_level(int level);

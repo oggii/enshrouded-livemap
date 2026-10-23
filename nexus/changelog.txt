@@ -1,3 +1,14 @@
+1.6.0 (not released yet)
+- Fog of war: a new overlay darkens everything the chosen player (or nobody) has explored yet.
+  The game keeps its real fog in the character save on each player's PC, so the map builds its
+  own: everything within 300 m (the game's own reveal radius) of where the server saw a player,
+  plus 300 m around every place they discovered in the game (that covers the time before the
+  update). Saved in livemap/explored.json.
+- The Discovered filter now works for every marker and per player: towns, dungeons, camps and
+  the like use the game's own discovery state, everything else (shrines, wells, chests, ...)
+  counts as discovered inside that player's explored area.
+  Needs the server part (iphlpapi.dll) of 1.6.0.
+
 1.5.0
 - Discovered places: the marker panel can show all places, only the ones discovered, or only the
   ones not discovered yet, by anyone or by one player. It is the game's own state: the server
