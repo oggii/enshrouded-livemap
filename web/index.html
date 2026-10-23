@@ -53,6 +53,9 @@
   @media (max-width: 900px) { #pois { max-height: 45vh; } }
   #status { bottom: 12px; left: 12px; font-size: 12px; color: var(--muted); padding: 6px 10px; }
   #status.bad { color: var(--danger); }
+  #tileNote { top: 12px; left: 50%; transform: translateX(-50%); max-width: min(460px, calc(100vw - 32px));
+    font-size: 13px; color: var(--danger); display: none; }
+  #tileNote.open { display: block; }
   #calib { bottom: 36px; right: 12px; max-width: 320px; display: none; font-size: 13px; }
   #calib.open { display: block; }
   #calib textarea { width: 100%; height: 80px; background: #0d0b12; color: var(--text);
@@ -94,6 +97,7 @@
   <div class="row"><span>Weather</span><b id="weather">–</b></div>
 </div>
 <div id="status" class="card">connecting…</div>
+<div id="tileNote" class="card"></div>
 <button id="calibToggle" type="button">Calibrate</button>
 <div id="calib" class="card">
   <h2>Calibration</h2>
@@ -175,6 +179,18 @@
         layer = L.tileLayer(m.tiles + q, { tileSize: m.tileSize || 512, bounds: b, noWrap: true,
           minZoom: map.getMinZoom(), maxZoom: map.getMaxZoom(),
           minNativeZoom: m.minNativeZoom ?? -5, maxNativeZoom: m.maxNativeZoom ?? 0 });
+        // Tiles that are not there (a folder from another version, e.g. only the HD file
+        // unzipped over an old install) leave an empty map: say so instead.
+        let loaded = 0, failed = 0;
+        const note = document.getElementById("tileNote");
+        layer.on("tileload", () => { loaded++; note.classList.remove("open"); });
+        layer.on("tileerror", () => {
+          if (++failed < 3 || loaded) return;
+          note.textContent = "The map pictures of \"" + m.name + "\" are missing (livemap/" + m.tiles.split("/")[0]
+            + "). Unzip the main file of the Live Map over the install, then reload.";
+          note.classList.add("open");
+        });
+        layer.on("remove", () => note.classList.remove("open"));
       } else {
         // With a preview, the small image shows first; the full one is fetched after it and swapped in.
         layer = L.imageOverlay((m.preview || m.file) + q, b);

@@ -6,7 +6,8 @@ own 1 m relief (cliffs, banks, paths and ruins come from the game data), as tile
 browser loads only what is on screen.
 
 INSTALL
-Needs the Live Map (main file) installed first.
+Needs the Live Map main file of the SAME version installed first (iphlpapi.dll and the
+livemap folder). With an older main file the "Game map" style stays empty.
 1. Copy the livemap folder from this zip next to enshrouded_server.exe (it adds
    livemap/tiles-hd and replaces livemap/maps.json).
 2. Reload the map page: switch between "Game map" and "HD" at the bottom left.
