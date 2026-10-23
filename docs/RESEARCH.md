@@ -372,7 +372,23 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   Progress panel), second = the game's build number; the order matches `keen::GameParameters`
   {flameLevel, gameSettingsPreset, voiceChatMode, isVoiceChatEnabled, isTextChatEnabled}. The DLL
   asks 127.0.0.1:<queryPort> once a minute (works under Wine) and puts `flameLevel` in /state.
-- Marker discovery (for a Known/Undiscovered filter, Nexus request 23 Oct): marker entities carry
-  `MapMarkerUnlockRequirements` (hint/visible/completed knowledge requirements) and
-  `MapMarkerVisibilityState` {visibility, lastChange, knowledgeChangeCounter} plus a
-  `MapMarkerToggleState.visibilityMap`; to be read from the server's ECS like the build zones.
+- Marker discovery (Nexus request 23 Oct, Known/Undiscovered filter), measured on the live server
+  (build 26083076) with read-only memory dumps before and after a flight:
+  - Each marker template has `RuntimeMapMarkerUnlockRequirements.visibleStateQuery` = SimpleBool,
+    compare 1, `isExplicitPlayerKnowledgeQuery` true (275 templates; 32 world-scoped) with a
+    knowledge id. "Discovered" = that id set to 1 in the player's knowledge. Hint/completed are
+    `Extern` queries. `MapMarkerVisibilityState` is one value per entity (Hidden/Hint/Visible/
+    Completed), not per player.
+  - These ids are NOT in the static knowledge descriptor table (5280 entries, 0 matches) and not
+    stored as id lists in world0.ksd. They live in a per-player dynamic knowledge map: sorted key
+    array (uint32 ids) + parallel uint32 value array, wrapped as {ptr, count, capacity 11000,
+    allocator image+0x6ebb50, image+0x14ca308}; values 1 = set, >1 = counters. The online player's
+    map held 1243 entries before and 1245 after the flight; 44 of the 297 marker instances with a
+    visible id were in it, all in the south (where the player has been), none in the north.
+  - 81 such maps in memory, in groups of three with stride 0x5620 (one record per player slot;
+    only the first record filled while one player was online). A second, identical copy of the
+    key array exists (replication). The record's area is referenced from ServerPlayers-0x18
+    (0x7344583fd090 -> 0x7345271cd770); no pointer path of depth 3 from the G38Knowledge,
+    KnowledgeReplicationServer or ServerPlayers services reached the record yet.
+  - Open: a stable way for the DLL to find each player's map (static RE of the code that fills
+    it, e.g. the users of the 11000 capacity), and which slot a record belongs to.
