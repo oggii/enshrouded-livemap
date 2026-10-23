@@ -32,6 +32,9 @@
   #players li { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
   #players li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   #players li .coords { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #players li .follow { display: none; margin-left: auto; font-size: 11px; color: var(--accent); }
+  #players li.following .name { color: var(--accent); }
+  #players li.following .follow { display: inline; }
   #pois { width: 260px; min-height: 0; overflow: auto; }
   #pois.hidden { display: none; }
   #pois h2 { display: flex; justify-content: space-between; align-items: center; }
@@ -993,6 +996,17 @@
   // Player list rows are reused; text is only touched when it changes.
   const playerRows = new Map();
   let lastClockText = "";
+  // Follow a player: click their row (click again to stop). The map keeps them in the middle and
+  // zooms around them; dragging the map stops it. A link with &follow=<name> follows that player
+  // whenever they are online, also after a relog (for a second screen).
+  let follow = null, followName = new URLSearchParams(location.search).get("follow");
+  const centerZoom = ["scrollWheelZoom", "doubleClickZoom", "touchZoom"].filter(k => map.options[k]);
+  function setFollow(entity) {
+    follow = entity;
+    for (const k of centerZoom) map.options[k] = entity === null ? true : "center";
+    for (const [e, row] of playerRows) row.li.classList.toggle("following", e === entity);
+  }
+  map.on("dragstart", () => { if (follow !== null) { followName = null; setFollow(null); } });
   function render(state) {
     lastState = state;
     maybeRefreshFinds(state.findsVersion);
@@ -1027,7 +1041,8 @@
       let row = playerRows.get(p.entity);
       if (!row) {
         const li = document.createElement("li");
-        li.innerHTML = '<span class="dot"></span><span class="name"></span><span class="coords"></span>';
+        li.innerHTML = '<span class="dot"></span><span class="name"></span><span class="coords"></span><span class="follow">following</span>';
+        li.title = "Click to follow, click again to stop";
         li.querySelector(".dot").style.background = color;
         list.appendChild(li);
         row = { li, name: "", coords: "" };
@@ -1037,7 +1052,14 @@
       if (row.coords !== coords) { row.li.querySelector(".coords").textContent = coords; row.coords = coords; }
       if (!p.pos) continue;
       const ll = toLatLng(p.pos);
-      row.li.onclick = () => map.setView(ll, Math.max(map.getZoom(), -1));
+      row.li.onclick = () => {
+        followName = null;
+        if (follow === p.entity) return setFollow(null);
+        setFollow(p.entity);
+        map.setView(ll, Math.max(map.getZoom(), -1));
+      };
+      if (followName && name === followName && follow !== p.entity) { setFollow(p.entity); map.setView(ll, Math.max(map.getZoom(), -1)); }
+      if (follow === p.entity && !map._animatingZoom) map.panTo(ll, { animate: true, duration: 0.25, easeLinearity: 1 });
       let m = markers.get(p.entity);
       if (!m) {
         m = L.marker(ll, { icon: playerIcon(color), interactive: false, zIndexOffset: 1000 })
@@ -1077,6 +1099,7 @@
       }
     }
     for (const [entity, row] of playerRows) if (!seen.has(entity)) { row.li.remove(); playerRows.delete(entity); }
+    if (follow !== null && !seen.has(follow)) setFollow(null);
     for (const [entity, m] of markers) if (!seen.has(entity)) { m.remove(); markers.delete(entity); }
     updateCalibPlayers();
   }

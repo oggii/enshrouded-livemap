@@ -120,6 +120,9 @@ servers; the game data has no fixed time). Chests inside a Flame Altar's build z
 Change the time with `"chestRefillMinutes": 60` at the top level of `maps.json`; `0` = never.
 The marker panel has a switch for the rain and snow overlay.
 
+Click a player in the list to follow them (click again or drag the map to stop). Add
+`&follow=<name>` to the link to follow that player whenever they are online.
+
 ### Optional: HD map style
 
 On Nexus Mods there is an optional file with a second, colourful map style: an HD map picture
