@@ -1,3 +1,10 @@
+1.3.1
+- Fix: with the "Rain and snow" switch off, the page showed "Cannot read properties of
+  undefined (reading 'getContext')" every few seconds after a reload.
+- The page now says when the pictures of a map style are missing (for example when only the
+  HD file was unzipped over an older install) instead of showing an empty map.
+- HD map style file: its readme says it needs the main file of the same version.
+
 1.3.0
 - Markers carry the game's own names: "Ancient Spire · Revelwood" instead of "(capital)".
 - Switch "Rain and snow" at the top of the marker panel to hide the weather overlay.
