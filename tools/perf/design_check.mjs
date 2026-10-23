@@ -8,7 +8,8 @@
 //     darkest and the lightest map colour (worst case); 4.5:1, or 3:1 for large text (24 px, or
 //     18.66 px bold). Text straight on the map counts only with a halo (text-shadow).
 // At 1920 x 1080 with every category, fog, weather and the shroud on and the CPU throttled 4x:
-// frame times while panning (3 s) and while zooming in and out (3 s).
+// frame times while panning (3 s) and while zooming in and out (3 s). Every request needs ?key=x,
+// as on the real server; a request without it fails the "no failed requests" check.
 // Pass: no overflow or overlap, no text below its contrast, while panning at least 55 frames a
 // second on average and p95 <= 25 ms (frames come in vsync steps of 16.7 ms, so the median jumps);
 // after a pan that does not redraw the markers, hovering a marker still shows its own name. Prints the numbers either way, so old and new pages can be compared.
@@ -46,6 +47,8 @@ const types = { ".html": "text/html", ".json": "application/json", ".png": "imag
   ".woff2": "font/woff2", ".svg": "image/svg+xml", ".gz": "application/gzip" };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
+  // Like the DLL: every request needs the key, also the ones the page's CSS makes.
+  if (u.searchParams.get("key") !== "x") { res.writeHead(403); res.end(); return; }
   if (u.pathname === "/events") {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
     const t = setInterval(() => res.write("data: " + state() + "\n\n"), 250);
@@ -73,6 +76,7 @@ async function open(w, h) {
   const page = await browser.newPage({ viewport: { width: w, height: h } });
   const errors = [];
   page.on("pageerror", e => errors.push(e.message));
+  page.on("response", r => { if (r.status() >= 400) errors.push("HTTP " + r.status() + " " + new URL(r.url()).pathname); });
   await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("livemap.fog", "1"); localStorage.setItem("livemap.discBy", "Aldra Vey"); } catch {} });
   await page.goto(url);
   if (process.env.EXTRA_CSS) await page.addStyleTag({ content: process.env.EXTRA_CSS });

@@ -9,8 +9,9 @@
 <style>
   /* The look of the game's own map screen: Alegreya (closest free match to the game's
      Harmonique Display), the game's gold filigree frame, hairlines and player arrow (ui/, from
-     the client's UI textures), diamond toggles. Font in fonts/ (SIL OFL, see fonts/OFL.txt). */
-  @font-face { font-family: "Alegreya"; src: url("fonts/alegreya-latin.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
+     the client's UI textures), diamond toggles. Font in fonts/ (SIL OFL, see fonts/OFL.txt). The
+     server wants ?key= on every request, so the script hands the art to CSS as --ui-* and loads
+     the font itself. */
   :root {
     --bg: #120f18; --panel: rgba(18, 14, 25, 0.94); --raised: #221b2e; --line: rgba(220, 183, 107, 0.22);
     --text: #f3e9d4; --muted: #bcae94; --gold: #dcb76b; --gold-bright: #f6dca0; --gold-dim: #8f713a;
@@ -25,13 +26,13 @@
   #map::after { content: ""; position: absolute; inset: 0; z-index: 450; pointer-events: none; will-change: transform;
     background: radial-gradient(ellipse 120% 100% at 50% 50%, rgba(10, 8, 14, 0) 62%, rgba(10, 8, 14, 0.55) 88%, rgba(10, 8, 14, 0.85) 100%); }
   .card { position: absolute; z-index: 1000; background: var(--panel); color: var(--text);
-    border: 20px solid transparent; border-image: url("ui/frame.webp") 40 / 20px / 0 stretch;
+    border: 20px solid transparent; border-image: var(--ui-frame) 40 / 20px / 0 stretch;
     padding: 0 6px 2px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); }
-  .card::before { content: ""; position: absolute; inset: 0; background: url("ui/pattern.webp") center / 300px;
+  .card::before { content: ""; position: absolute; inset: 0; background: var(--ui-pattern) center / 300px;
     opacity: 0.06; pointer-events: none; }
   .card > * { position: relative; }
   h2.title, #players h2, #clock h2, #calib h2, #pois h2 { margin: 0 0 8px; padding-bottom: 9px; font: 700 12px/1.2 var(--caps);
-    letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); background: url("ui/separator.webp") left bottom / 100% 5px no-repeat; }
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); background: var(--ui-separator) left bottom / 100% 5px no-repeat; }
   #clock { top: 10px; right: 10px; min-width: 232px; }
   #clock .big { font-size: 46px; font-weight: 500; line-height: 1; margin: 4px 0 10px; color: #fff4dc;
     font-variant-numeric: oldstyle-nums; text-shadow: 0 0 18px rgba(220, 183, 107, 0.3); }
@@ -39,7 +40,7 @@
     border-top: 1px solid var(--line); font-variant-numeric: lining-nums tabular-nums; }
   #clock .row b { color: var(--text); font-weight: 700; }
   #left { position: absolute; z-index: 1000; top: 10px; left: 54px; display: flex; flex-direction: column;
-    gap: 8px; align-items: flex-start; max-height: calc(100vh - 120px); }
+    gap: 8px; align-items: flex-start; max-height: calc(100vh - 10px - var(--left-bottom, 56px)); }
   #left .card { position: relative; }
   #players { max-width: 330px; min-width: 200px; }
   #players ul { list-style: none; margin: 0; padding: 0; }
@@ -73,7 +74,7 @@
   #pois label .sw img { width: 18px; height: 18px; display: block; }
   #pois label .n { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: lining-nums tabular-nums; }
   #pois .group { margin-top: 6px; padding-top: 12px; font: 700 12px var(--caps); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
-    background: url("ui/hairline.webp") left top / 100% 2px no-repeat; }
+    background: var(--ui-hairline) left top / 100% 2px no-repeat; }
   #poiList > .group:first-child { margin-top: 0; padding-top: 2px; background: none; }
   #poiList::after { content: ""; display: block; position: sticky; bottom: -2px; height: 26px; margin-top: -8px; pointer-events: none;
     background: linear-gradient(rgba(18, 14, 25, 0), rgba(18, 14, 25, 0.96)); }
@@ -116,14 +117,17 @@
   .player-icon .arrow { position: relative; width: 28px; height: 28px; transition: transform 0.25s linear;
     filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000) drop-shadow(0 0 5px rgba(0, 0, 0, 0.6)); }
   .player-icon .arrow i { position: absolute; inset: -2px; transform: rotate(-90deg); background: var(--c);
-    -webkit-mask: url("ui/player.webp") center / contain no-repeat; mask: url("ui/player.webp") center / contain no-repeat; }
+    -webkit-mask: var(--ui-player) center / contain no-repeat; mask: var(--ui-player) center / contain no-repeat; }
   .player-icon .dot { width: 14px; height: 14px; border: 2px solid #fff6e4; margin: 7px; transform: rotate(45deg); box-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
   .leaflet-container:not(.leaflet-zoom-anim) .player-icon { transition: transform 0.25s linear; }
   .leaflet-bottom.leaflet-left { margin-bottom: 44px; }
   .leaflet-control-layers { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim) !important; border-radius: 0;
     padding: 5px 12px; font: 500 15px var(--serif); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45) !important; }
   .leaflet-control-layers label { color: var(--text); }
-  .leaflet-control-layers input { accent-color: var(--gold); }
+  .leaflet-control-layers input { appearance: none; -webkit-appearance: none; width: 10px; height: 10px; margin: 0 8px 0 3px;
+    transform: rotate(45deg); border: 1px solid var(--gold-dim); background: rgba(0, 0, 0, 0.3); cursor: pointer; vertical-align: 1px; }
+  .leaflet-control-layers input:checked { background: var(--gold); border-color: var(--gold-bright); box-shadow: 0 0 8px rgba(220, 183, 107, 0.65); }
+  .leaflet-control-layers input:focus-visible { outline: 1px solid var(--gold-bright); outline-offset: 3px; }
   .leaflet-bar { border: 0 !important; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45) !important; }
   .leaflet-bar a { background: var(--panel); color: var(--gold); border: 1px solid var(--gold-dim) !important; border-radius: 0 !important;
     font: 500 20px/28px var(--serif); margin-bottom: 4px; }
@@ -173,7 +177,7 @@
   <div class="row"><span>Flame level</span><b id="flameLevel">–</b></div>
 </div>
 <div id="status" class="card">connecting…</div>
-<div id="compass" aria-hidden="true"><span>N</span><img src="ui/compass.webp" alt="" fetchpriority="low" decoding="async"></div>
+<div id="compass" aria-hidden="true"><span>N</span><img alt="" fetchpriority="low" decoding="async"></div>
 <div id="tileNote" class="card"></div>
 <button id="calibToggle" type="button">Calibrate</button>
 <div id="calib" class="card">
@@ -192,6 +196,16 @@
 (() => {
   const key = new URLSearchParams(location.search).get("key") || "";
   const q = "?key=" + encodeURIComponent(key);
+  // The page's own art and font, with the key the server wants on every request.
+  for (const n of ["frame", "pattern", "separator", "hairline", "player"]) {
+    document.documentElement.style.setProperty("--ui-" + n, 'url("ui/' + n + ".webp" + q + '")');
+  }
+  document.querySelector("#compass img").src = "ui/compass.webp" + q;
+  const fontReady = window.FontFace ? (() => {
+    const f = new FontFace("Alegreya", 'url("fonts/alegreya-latin.woff2' + q + '") format("woff2")', { weight: "400 900", display: "swap" });
+    document.fonts.add(f);
+    return f.load();
+  })() : Promise.reject();
   const colors = ["#f2b766", "#6fd3c7", "#ff8fb1", "#9fd36f", "#b49bff", "#ffd36f", "#6fb4ff", "#ff9f6f"];
   // The map works in world metres: latlng = [z, x]. The world is worldSize x worldSize metres
   // (10240 in Enshrouded); north (+z) is up. Each map image covers `bounds` of the world.
@@ -288,7 +302,14 @@
     currentStyle = layers[saved] ? saved : config.maps[0].name;
     layers[currentStyle].addTo(map);
     showBackground();
-    if (config.maps.length > 1) L.control.layers(layers, null, { position: "bottomleft", collapsed: false }).addTo(map);
+    if (config.maps.length > 1) {
+      // The style switch sits bottom left; the left column (marker panel) stops above it.
+      const styles = L.control.layers(layers, null, { position: "bottomleft", collapsed: false }).addTo(map);
+      const reserve = () => document.documentElement.style.setProperty("--left-bottom",
+        Math.round(innerHeight - styles.getContainer().getBoundingClientRect().top + 8) + "px");
+      reserve();
+      addEventListener("resize", reserve);
+    }
     map.on("baselayerchange", e => {
       currentStyle = e.name;
       showBackground();
@@ -656,7 +677,7 @@
   });
   const poiLayer = new PoiLayer();
   // Place names on the canvas use Alegreya: draw them again once the font is in.
-  if (document.fonts) document.fonts.load("700 13px Alegreya").then(() => poiLayer.schedule(), () => {});
+  fontReady.then(() => poiLayer.schedule(), () => {});
   window.livemap = { map, poiLayer, heading(axis) { HEADING.axis = axis; try { localStorage.setItem("livemap.headingAxis", axis); } catch {} } };
 
   // Finds (livemap/finds.json via /finds): ore deposits become categories "ore:<sort>" with a
