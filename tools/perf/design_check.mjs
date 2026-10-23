@@ -12,7 +12,9 @@
 // as on the real server; a request without it fails the "no failed requests" check.
 // Pass: no overflow or overlap, no text below its contrast, while panning at least 55 frames a
 // second on average and p95 <= 25 ms (frames come in vsync steps of 16.7 ms, so the median jumps);
-// after a pan that does not redraw the markers, hovering a marker still shows its own name. Prints the numbers either way, so old and new pages can be compared.
+// after a pan that does not redraw the markers, hovering a marker still shows its own name; the
+// players, clock and marker panels move by their titles (snap, kept after a reload, back on a
+// double-click, in view in a smaller window, a click on a title button is no drag). Prints the numbers either way, so old and new pages can be compared.
 // For finding what costs frames: PERF_ONLY=1 skips the four sizes, EXTRA_CSS="..." adds CSS.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
@@ -178,6 +180,65 @@ for (const [w, h] of process.env.PERF_ONLY ? [] : [[390, 844], [768, 1024], [144
   check("region names: all when zoomed out, none when zoomed in", total >= 9 && far === total && near === 0, `${far} of ${total} at zoom -3, ${near} at zoom 0.5`);
   check("no page errors (regions)", !errors.length, errors.join(" | ") || "none");
   await page.close();
+}
+
+// Movable panels at 1440 x 900, in one browser context so the place survives a reload.
+{
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("response", r => { if (r.status() >= 400) errors.push("HTTP " + r.status() + " " + new URL(r.url()).pathname); });
+  const ready = () => page.waitForFunction(() => window.livemap?.discovered?.exp() && window.livemap.weather.state()?.players?.length, null, { timeout: 30000 });
+  await page.goto(url);
+  await ready();
+  const box = sel => page.evaluate(s => { const r = document.querySelector(s).getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }, sel);
+  // Grab the title 30 px in and drop it so the panel's top left lands on (x, y).
+  const drag = async (sel, x, y) => {
+    const c = await box(sel), h = await box(sel + " h2");
+    const gx = h.l + 30, gy = h.t + 6;
+    await page.mouse.move(gx, gy);
+    await page.mouse.down();
+    await page.mouse.move(gx + 20, gy + 20, { steps: 3 });
+    await page.mouse.move(x + gx - c.l, y + gy - c.t, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+  };
+  const near = (a, b) => Math.abs(a - b) <= 2;
+  const home = await box("#clock");
+  await drag("#clock", 15, 400);
+  const moved = await box("#clock");
+  check("move: the clock lands where it is dropped and snaps to the edge", near(moved.l, 10) && near(moved.t, 400),
+    `(${home.l.toFixed(0)}, ${home.t.toFixed(0)}) -> (${moved.l.toFixed(0)}, ${moved.t.toFixed(0)})`);
+  await page.reload();
+  await ready();
+  const kept = await box("#clock");
+  check("move: the place is kept after a reload", near(kept.l, moved.l) && near(kept.t, moved.t), `(${kept.l.toFixed(0)}, ${kept.t.toFixed(0)})`);
+  await page.setViewportSize({ width: 900, height: 560 });
+  await page.waitForTimeout(300);
+  const small = await box("#clock");
+  check("move: still whole in a smaller window", small.l >= 0 && small.t >= 0 && small.r <= 900 && small.b <= 560,
+    `(${small.l.toFixed(0)}, ${small.t.toFixed(0)}, ${small.r.toFixed(0)}, ${small.b.toFixed(0)}) in 900 x 560`);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
+  const t = await box("#clock h2");
+  await page.mouse.dblclick(t.l + 30, t.t + 6);
+  await page.waitForTimeout(250);
+  const back = await box("#clock");
+  check("move: a double-click on the title puts it back", near(back.l, home.l) && near(back.t, home.t), `(${back.l.toFixed(0)}, ${back.t.toFixed(0)})`);
+  await page.click("#poiToggle");
+  await page.waitForTimeout(200);
+  const p0 = await box("#pois");
+  await page.click("#poiAll");
+  await page.waitForTimeout(200);
+  const p1 = await box("#pois"), still = await page.evaluate(() => !document.querySelector("#pois").classList.contains("moved"));
+  check("move: a click on a title button is no drag", still && near(p0.l, p1.l) && near(p0.t, p1.t), `moved class ${!still}`);
+  await drag("#pois", 1100, 120);
+  const pm = await box("#pois");
+  check("move: the marker panel fits the window where it is dropped", near(pm.l, 1100) && near(pm.t, 120) && pm.b <= 900 && pm.r <= 1440,
+    `(${pm.l.toFixed(0)}, ${pm.t.toFixed(0)}) to (${pm.r.toFixed(0)}, ${pm.b.toFixed(0)})`);
+  check("no page errors (move)", !errors.length, errors.join(" | ") || "none");
+  await context.close();
 }
 
 // Frame times under load.

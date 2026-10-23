@@ -42,6 +42,12 @@
   #left { position: absolute; z-index: 1000; top: 10px; left: 54px; display: flex; flex-direction: column;
     gap: 8px; align-items: flex-start; max-height: calc(100vh - 10px - var(--left-bottom, 56px)); }
   #left .card { position: relative; }
+  /* Movable panels (wide screens): the title is the handle. */
+  @media (min-width: 601px) {
+    #players h2, #clock h2, #pois h2 { cursor: grab; user-select: none; touch-action: none; }
+    .card.dragging, .card.dragging h2 { cursor: grabbing; }
+  }
+  .card.dragging { box-shadow: 0 26px 54px rgba(0, 0, 0, 0.65); }
   #players { max-width: 330px; min-width: 200px; }
   #players ul { list-style: none; margin: 0; padding: 0; }
   #players li { display: flex; align-items: baseline; gap: 9px; padding: 3px 0; cursor: pointer; font-size: 16px; }
@@ -455,7 +461,11 @@
   const poiImages = {};    // category id -> {img, base}
   const poiPanel = document.getElementById("pois");
   const poiToggle = document.getElementById("poiToggle");
-  const setPoiOpen = open => { poiPanel.classList.toggle("hidden", !open); poiToggle.setAttribute("aria-expanded", String(open)); };
+  const setPoiOpen = open => {
+    poiPanel.classList.toggle("hidden", !open);
+    poiToggle.setAttribute("aria-expanded", String(open));
+    if (open && poiPanel.classList.contains("moved")) place(poiPanel, readPos("pois"));   // measure it now that it shows
+  };
   poiToggle.onclick = () => setPoiOpen(poiPanel.classList.contains("hidden"));
   document.getElementById("poiClose").onclick = () => { setPoiOpen(false); poiToggle.focus(); };
   function poiPrefs() { try { return JSON.parse(localStorage.getItem("livemap.pois") || "{}"); } catch { return {}; } }
@@ -1465,6 +1475,88 @@
   setInterval(() => { if (!document.hidden) poiLayer.invalidate(); }, 60000);
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
+  // Movable panels (wide screens): drag the players, clock or marker panel by its title. It stays
+  // inside the window, snaps to an edge closer than 24 px and is kept relative to the nearest
+  // corner, so it stays put when the window changes size. The browser remembers each panel's place
+  // (livemap.pos.<id>); a double-click on the title puts it back. Phones keep the fixed layout.
+  const wide = matchMedia("(min-width: 601px)");
+  const MOVABLE = ["players", "pois", "clock"];
+  const readPos = id => { try { return JSON.parse(localStorage.getItem("livemap.pos." + id) || "null"); } catch { return null; } };
+  const writePos = (id, p) => { try { if (p) localStorage.setItem("livemap.pos." + id, JSON.stringify(p)); else localStorage.removeItem("livemap.pos." + id); } catch {} };
+  let panelZ = 1002;
+  function unplace(el) {
+    for (const k of ["position", "left", "right", "top", "bottom", "maxHeight", "zIndex", "width"]) el.style[k] = "";
+    el.classList.remove("moved");
+  }
+  function place(el, p) {
+    unplace(el);
+    if (!p || !wide.matches) return;
+    el.classList.add("moved");
+    el.style.position = "fixed";
+    el.style.left = el.style.right = el.style.top = el.style.bottom = "auto";   // the stylesheet's sides must not pull too
+    el.style.zIndex = String(panelZ);
+    if (el.id === "pois") el.style.maxHeight = Math.max(160, innerHeight - p.y - 10) + "px";
+    // A smaller window than when it was placed: keep the whole panel in view.
+    const r = el.getBoundingClientRect();
+    el.style[p.h] = Math.max(4, Math.min(p.x, innerWidth - r.width - 4)) + "px";
+    el.style[p.v] = Math.max(4, Math.min(p.y, innerHeight - r.height - 4)) + "px";
+  }
+  function startDrag(el, handle, e) {
+    if (!wide.matches || e.button !== 0 || e.target.closest("button, select, input, a")) return;
+    const r0 = el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+    // The marker panel may go lower than its height allows: it then scrolls in what is left.
+    const keepH = el.id === "pois" ? Math.min(r0.height, 200) : r0.height;
+    let moving = false;
+    handle.setPointerCapture(e.pointerId);
+    const move = ev => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!moving) {
+        if (Math.hypot(dx, dy) < 4) return;     // a click, not a drag
+        moving = true;
+        unplace(el);
+        el.classList.add("moved", "dragging");
+        el.style.position = "fixed";
+        el.style.right = el.style.bottom = "auto";
+        el.style.width = r0.width + "px";        // same size while it moves
+        el.style.zIndex = String(++panelZ);
+      }
+      const top = Math.max(4, Math.min(r0.top + dy, innerHeight - keepH - 4));
+      el.style.left = Math.max(4, Math.min(r0.left + dx, innerWidth - r0.width - 4)) + "px";
+      el.style.top = top + "px";
+      if (el.id === "pois") el.style.maxHeight = (innerHeight - top - 10) + "px";
+    };
+    const up = ev => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      if (handle.hasPointerCapture(ev.pointerId)) handle.releasePointerCapture(ev.pointerId);
+      el.classList.remove("dragging");
+      el.style.width = "";
+      if (!moving) return;
+      const r = el.getBoundingClientRect();
+      const p = r.left + r.width / 2 < innerWidth / 2 ? { h: "left", x: r.left } : { h: "right", x: innerWidth - r.right };
+      // The marker panel hangs from its top (it grows and scrolls downwards); the others take the nearer edge.
+      Object.assign(p, el.id === "pois" || r.top + r.height / 2 < innerHeight / 2 ? { v: "top", y: r.top } : { v: "bottom", y: innerHeight - r.bottom });
+      if (p.y < 24) p.y = 10;
+      if (p.x < 24) p.x = p.h === "left" && p.v === "top" && p.y < 100 ? 54 : 10;   // not over the zoom buttons
+      p.x = Math.round(p.x); p.y = Math.round(p.y);
+      writePos(el.id, p);
+      place(el, p);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+  for (const id of MOVABLE) {
+    const el = document.getElementById(id), handle = el.querySelector("h2");
+    handle.title = "Drag to move, double-click to put it back";
+    handle.addEventListener("pointerdown", e => startDrag(el, handle, e));
+    handle.addEventListener("dblclick", e => { if (e.target.closest("button, select, input, a")) return; writePos(id, null); unplace(el); });
+    place(el, readPos(id));
+  }
+  const replaceAll = () => { for (const id of MOVABLE) { const p = readPos(id); if (p || document.getElementById(id).classList.contains("moved")) place(document.getElementById(id), p); } };
+  wide.addEventListener("change", replaceAll);
+  addEventListener("resize", replaceAll);
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
   window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode,
     explored: (x, z) => exploredAt(x, z), exp: () => EXP, regions: () => rawPoiData && rawPoiData.regions,
