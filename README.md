@@ -115,6 +115,11 @@ You can add your own map picture as a second style in `livemap/maps.json`:
 `bounds` is the part of the world the picture covers, in metres (`[[south, west], [north, east]]`).
 If it does not sit right, open the map with `&calibrate` added to the link and follow the steps.
 
+Looted chests show as looted for 30 minutes, then as full again (what players see on dedicated
+servers; the game data has no fixed time). Chests inside a Flame Altar's build zone stay looted.
+Change the time with `"chestRefillMinutes": 60` at the top level of `maps.json`; `0` = never.
+The marker panel has a switch for the rain and snow overlay.
+
 ### Optional: HD map style
 
 On Nexus Mods there is an optional file with a second, colourful map style: an HD map picture

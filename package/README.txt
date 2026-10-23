@@ -46,6 +46,10 @@ Bases=1                the players' Flame Altars on the map
 Everyone with the link sees all player positions and Flame Altars. Change Key= to lock old
 links out.
 
+LOOTED CHESTS
+A looted chest counts as full again after 30 minutes (not inside a Flame Altar's build zone).
+Other time: add "chestRefillMinutes": 60, at the top of livemap\maps.json (0 = never).
+
 CHECK
 livemap.log shows "map link: http://..." and, after a player joins, the chat shows
 "Live map: ...". Open the link from outside your network (phone without Wi-Fi).

@@ -1,3 +1,10 @@
+1.3.0 (not released yet)
+- Markers carry the game's own names: "Ancient Spire · Revelwood" instead of "(capital)".
+- Switch "Rain and snow" at the top of the marker panel to hide the weather overlay.
+- Looted chests come back: after 30 minutes a looted chest shows as full again, the tooltip
+  says when it was looted and when it refills. Chests inside a Flame Altar's build zone stay
+  looted. Other time: "chestRefillMinutes" in livemap/maps.json (0 = never).
+
 1.2.0
 - Weather like in the game: rain and snow are computed with the game's own rules (each
   weather layer only rains inside its region, fade in and out, the zone's rain shape, snow

@@ -118,6 +118,7 @@
   map.attributionControl.setPrefix("").addAttribution("Map art © Keen Games");
   const markers = new Map();
   let lastState = null, config = null, currentStyle = null;
+  let showWeather = (() => { try { return localStorage.getItem("livemap.weather") !== "0"; } catch { return true; } })();
   const layers = {};
 
   function toLatLng(pos) { return L.latLng(pos[2], pos[0]); }
@@ -307,6 +308,27 @@
     return "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + svg + "</svg>");
   }
   function fmtDay(unix) { const d = new Date(unix * 1000); return d.getDate() + "." + (d.getMonth() + 1) + "."; }
+  function fmtAgo(unix) {
+    const min = Math.max(0, Math.round((Date.now() / 1000 - unix) / 60));
+    return min < 90 ? min + " min ago" : Math.round(min / 60) + " h ago";
+  }
+  // A looted chest fills up again after `chestRefillMinutes` (maps.json; default 30, what players
+  // see on dedicated servers; 0 = never), except inside a Flame Altar's build zone, where the
+  // game does not refill chests. Returns null once it should be full again.
+  function chestRefillMinutes() {
+    const v = config ? Number(config.chestRefillMinutes) : NaN;
+    return Number.isFinite(v) && v >= 0 ? v : 30;
+  }
+  function inBuildZone(x, z) {
+    const list = basesData && basesData.bases;
+    return !!list && list.some(b => b.size && Math.abs(x - b.x) <= b.size[0] && Math.abs(z - b.z) <= b.size[2]);
+  }
+  function lootState(c) {
+    const minutes = chestRefillMinutes();
+    if (minutes === 0 || inBuildZone(c.x, c.z)) return { never: true };
+    const left = c.at + minutes * 60 - Date.now() / 1000;
+    return left > 0 ? { left: Math.ceil(left / 60) } : null;
+  }
   let iconFiles = {}, poiData = null;
   let hideLooted = (() => { try { return localStorage.getItem("livemap.hideLooted") === "1"; } catch { return false; } })();
   const poiEnabled = {};   // category id -> shown
@@ -460,7 +482,9 @@
               ctx.strokeText(t, x, y); ctx.fillText(t, x, y);
               this._push(x, y, 14, p);
             } else {
-              const looted = lootedByPoi.size && !p.isFind ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
+              const record = lootedByPoi.size && !p.isFind ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
+              const looted = record && lootState(record) ? record : null;
+              if (p[5] && p[5].chest && !lootState(p[5].chest)) continue;   // a looted chest not in the data, refilled
               if (looted && hideLooted) continue;
               if (looted && lootedSprite) ctx.drawImage(lootedSprite.canvas, x - lootedSprite.w / 2, y - lootedSprite.w / 2, lootedSprite.w, lootedSprite.w);
               else ctx.drawImage(sp.canvas, x - half, y - half, dw, dw);
@@ -493,9 +517,16 @@
         return;
       }
       const p = h.p[best];
-      const looted = !p.isFind && lootedByPoi.size ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
-      this._tip.setLatLng([p[3], p[1]]).setContent(p[4] + " · " + p[2].toFixed(0) + " m"
-        + (looted ? " · looted by " + looted.by + ", " + fmtDay(looted.at) : "") + (under > 1 ? " · +" + (under - 1) + " more here" : ""));
+      const record = !p.isFind && lootedByPoi.size ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
+      let lootText = "";
+      if (record) {
+        const st = lootState(record);
+        lootText = st ? " · looted by " + record.by + ", " + fmtDay(record.at)
+            + (st.never ? " · in a base: does not refill" : " · refills in about " + st.left + " min")
+          : " · looted by " + record.by + " " + fmtAgo(record.at) + ", should be full again";
+      }
+      this._tip.setLatLng([p[3], p[1]]).setContent(p[4] + " · " + p[2].toFixed(0) + " m" + lootText
+        + (under > 1 ? " · +" + (under - 1) + " more here" : ""));
       if (!this._tipOpen) { this._map.openTooltip(this._tip); this._tipOpen = true; }
       this._map.getContainer().style.cursor = "pointer";
     },
@@ -561,7 +592,7 @@
       if (c.rl === false) continue;
       const poi = c.poi !== null && c.poi >= 0 && c.poi < data.pois.length ? c.poi : nearestChest(c.x, c.z);
       if (poi >= 0) lootedByPoi.set(poi, c);
-      else if (c.rl === true) unknownChests.push([ "looted", c.x, c.y, c.z, "Looted chest · by " + c.by + ", " + fmtDay(c.at), { find: true } ]);
+      else if (c.rl === true) unknownChests.push([ "looted", c.x, c.y, c.z, "Looted chest · by " + c.by + ", " + fmtDay(c.at), { find: true, chest: c } ]);
     }
     if (unknownChests.length) {
       data.categories.push({ id: "looted", label: "Looted chests (not in the data)", color: "#6b6b75", on: true, label_default: "Looted chest" });
@@ -629,14 +660,22 @@
       list.appendChild(label);
     }
     const hide = document.createElement("label");
-    hide.innerHTML = '<input type="checkbox"><span class="t">Hide looted chests</span>';
+    hide.innerHTML = '<input type="checkbox" data-extra="1"><span class="t">Hide looted chests</span>';
     const hb = hide.querySelector("input");
     hb.checked = hideLooted;
     hb.onchange = () => { hideLooted = hb.checked; try { localStorage.setItem("livemap.hideLooted", hideLooted ? "1" : "0"); } catch {} poiLayer.redraw(); };
     const lootHeader = [...list.querySelectorAll(".group")].find(h => h.textContent === "Loot");
     if (lootHeader) { const next = [...list.children].slice([...list.children].indexOf(lootHeader) + 1).find(e => e.classList.contains("group")); list.insertBefore(hide, next || null); }
+    // Weather overlay on or off (the player list keeps its weather text either way).
+    const wxHead = document.createElement("div"); wxHead.className = "group"; wxHead.textContent = "Weather";
+    const wx = document.createElement("label");
+    wx.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#5aa0ff"></span><span class="t">Rain and snow</span>';
+    const wb = wx.querySelector("input");
+    wb.checked = showWeather;
+    wb.onchange = () => { setWeatherShown(wb.checked); };
+    list.prepend(wxHead, wx);
     document.getElementById("poiAll").onclick = () => {
-      const boxes = [...list.querySelectorAll("input")];
+      const boxes = [...list.querySelectorAll("input:not([data-extra])")];
       const turnOn = boxes.some(b => !b.checked);
       boxes.forEach(b => { if (b.checked !== turnOn) { b.checked = turnOn; b.onchange(); } });
     };
@@ -813,7 +852,7 @@
   }
   // Hover text for a map position with rain or snow (no clickable layer: the POI hit test asks).
   function weatherTip(latlng) {
-    if (!lastState || !lastState.weather || !WX) return null;
+    if (!showWeather || !lastState || !lastState.weather || !WX) return null;
     const x = latlng.lng, z = latlng.lat, w = weatherWeights(lastState.weather, x, null, z);
     const fall = Math.max(w.rain, w.snow, w.blizzard);
     if (fall < 0.05 || !w.zone) return null;
@@ -902,8 +941,19 @@
       ctx.drawImage(this._grid, a.x, a.y, b.x - a.x, b.y - a.y);
     },
   });
-  const weatherLayer = new WeatherLayer().addTo(map);
+  const weatherLayer = new WeatherLayer();
+  function setWeatherShown(on) {
+    showWeather = on;
+    try { localStorage.setItem("livemap.weather", on ? "1" : "0"); } catch {}
+    if (on) { weatherLayer.addTo(map); weatherLayer._last = 0; if (lastState) weatherLayer.update(lastState.weather); }
+    else weatherLayer.remove();
+  }
+  if (showWeather) weatherLayer.addTo(map);
+  // Looted chests refill with time: redraw the markers once a minute.
+  setInterval(() => { if (!document.hidden) poiLayer.invalidate(); }, 60000);
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
+  // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
+  window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
   window.livemap.weather = {
     state: () => lastState,
     weights: pos => weatherWeights(lastState.weather, pos[0], pos[1], pos[2]),
