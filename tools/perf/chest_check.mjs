@@ -56,6 +56,10 @@ const layerOn = () => page.evaluate(() => !!document.querySelector("canvas.weath
 console.log("switch present", await box.count() === 1);
 await box.evaluate(b => { b.checked = false; b.dispatchEvent(new Event("change")); });
 const off = [await page.evaluate(() => localStorage.getItem("livemap.weather")), await layerOn()];
+await page.waitForTimeout(4500);   // live states keep coming while the switch is off
+await page.reload();                 // and a page opened with the switch already off
+await page.waitForTimeout(6000);
+await page.click("#poiToggle");
 await box.evaluate(b => { b.checked = true; b.dispatchEvent(new Event("change")); });
 const on = [await page.evaluate(() => localStorage.getItem("livemap.weather")), await layerOn()];
 console.log("switch off -> stored, layer", off.join(" "), "| on ->", on.join(" "));

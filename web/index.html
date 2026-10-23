@@ -908,7 +908,8 @@
     },
     update(weather) {
       const now = performance.now();
-      if (!WX || !weather || (this._last && now - this._last < 3000)) return;
+      // Off (the "Rain and snow" switch): nothing to draw into until it is added again.
+      if (!this._map || !WX || !weather || (this._last && now - this._last < 3000)) return;
       this._last = now;
       const n = 256, cell = WX.worldSize / n, t = weather.worldTime;
       const rain = new Float32Array(n * n), bliz = new Float32Array(n * n);
