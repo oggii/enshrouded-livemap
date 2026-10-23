@@ -25,8 +25,10 @@ for (let row = 0; row < N; row++) for (let col = 0; col < N / 2; col++) { const 
 const explored = JSON.stringify({ version: 3, cells: N, cellMetres: CELL, players: { Alice: Buffer.from(westBits).toString("base64") } });
 const discovered = JSON.stringify({ version: 7, players: {
   Alice: { online: true, at: 1792780000, keys: alice }, Bob: { online: false, at: 1792770000, keys: bob } } });
+let live = null;   // Alice's position once she "logs in" (the live phase at the end)
 const state = () => JSON.stringify({ time: { raw: 36e12, dayStart: 216e11, dayEnd: 792e11, isDay: true, ageMs: 10 },
-  players: [], weather: null, findsVersion: 0, basesVersion: 0, flameLevel: 3, discoveredVersion: 7, exploredVersion: 3 });
+  players: live ? [{ entity: 7, name: "Alice", pos: live, rot: [0, 0, 0, 1], ageMs: 10 }] : [],
+  weather: null, findsVersion: 0, basesVersion: 0, flameLevel: 3, discoveredVersion: 7, exploredVersion: 3 });
 const types = { ".html": "text/html", ".json": "application/json", ".png": "image/png", ".webp": "image/webp" };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
@@ -93,21 +95,40 @@ for (const [who, keys, exploredAt] of [["Alice", new Set(alice), aliceExplored],
   check(`Not discovered by ${who}: the complement`, u.length + d.length === all.length && u.every(p => p.k !== null ? !keys.has(p.k) : true),
     `${u.length} + ${d.length} = ${u.length + d.length} of ${all.length}`);
 }
-// Fog pixels for Alice: dark east, clear west.
+// Fog pixels for Alice, read from the canvas on the map: dark east, clear west, and a soft edge
+// (several steps between clear and dark across her border at x = 5120) instead of a hard one.
 await setMode("all", "Alice");
-await page.waitForTimeout(600);
-const fog = await page.evaluate(async () => {
-  const img = document.querySelector(".leaflet-fog-pane img");
-  if (!img) return null;
-  await img.decode().catch(() => {});
-  const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
-  const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0);
-  const at = (x, z) => ctx.getImageData(Math.floor(x / 10240 * c.width), Math.floor((1 - z / 10240) * c.height), 1, 1).data[3];
-  return { west: at(2000, 5000), east: at(8000, 5000) };
-});
-check("fog overlay: clear where Alice has been, dark elsewhere", fog && fog.west === 0 && fog.east > 150, JSON.stringify(fog));
+await page.waitForTimeout(1200);
+const fogAt = pts => page.evaluate(pts => {
+  const c = document.querySelector(".leaflet-fog-pane canvas");
+  if (!c) return null;
+  const ctx = c.getContext("2d");
+  return pts.map(([x, z]) => ctx.getImageData(Math.floor(x / 10240 * c.width), Math.floor((1 - z / 10240) * c.height), 1, 1).data[3]);
+}, pts);
+const fog = await fogAt([[2000, 5000], [8000, 5000]]);
+check("fog overlay: clear where Alice has been, dark elsewhere", fog && fog[0] === 0 && fog[1] > 150, JSON.stringify(fog));
+const edge = await fogAt([4950, 4990, 5030, 5070, 5110, 5150, 5190, 5230, 5270, 5310].map(x => [x, 5000]));
+const between = edge ? edge.filter(a => a > 5 && a < 185).length : 0;
+check("fog edge is soft: 3+ steps between clear and dark, never lighter further out",
+  edge && edge[0] === 0 && edge.at(-1) > 150 && between >= 3 && edge.every((a, i) => i === 0 || a >= edge[i - 1]), JSON.stringify(edge));
+// Live: Alice shows up east of her explored area while /explored stays the same. The page clears
+// 300 m around her by itself: the fog there fades out (several in-between values, not one jump),
+// the cell counts as explored and an unkeyed place there shows under "Discovered by Alice".
+const spot = all.find(p => p.k === null && p.x > 6500 && p.x < 9500 && p.z > 1000 && p.z < 9000 && !aliceExplored(p));
+await setMode("known", "Alice");
+const probe = () => page.evaluate(([x, z]) => ({ explored: window.livemap.discovered.explored(x, z), alpha: window.livemap.discovered.fogAlpha(x, z) }), [spot.x, spot.z]);
+const before = await probe(), shownBefore = (await drawn()).some(p => p.x === spot.x && p.z === spot.z);
+live = [spot.x, 120, spot.z];
+const samples = [], t0 = Date.now();
+while (Date.now() - t0 < 2500) { samples.push({ t: Date.now() - t0, a: (await probe()).alpha }); await page.waitForTimeout(40); }
+const after = await probe(), shownAfter = (await drawn()).some(p => p.x === spot.x && p.z === spot.z);
+const mid = new Set(samples.filter(s => s.a > 5 && s.a < 185).map(s => s.a));
+const start = samples.find(s => s.a < 185), end = samples.find(s => s.a === 0);
+check("live: fog clears around the player by itself, fading", !before.explored && before.alpha > 150 && after.explored && after.alpha === 0 && mid.size >= 3,
+  `alpha ${before.alpha} -> 0 in ${start && end ? end.t - start.t : "?"} ms with ${mid.size} in-between values, explored ${before.explored} -> ${after.explored}`);
+check("live: a place there shows under \"Discovered by Alice\"", !shownBefore && shownAfter, `${shownBefore} -> ${shownAfter} at ${spot.x.toFixed(0)}, ${spot.z.toFixed(0)}`);
 if (shot) {
-  await setMode("known", "Bob");
+  await page.evaluate(([x, z]) => window.livemap.map.setView([z, x], -2, { animate: false }), [spot.x, spot.z]);
   await page.waitForTimeout(800);
   await page.screenshot({ path: shot });
 }

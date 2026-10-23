@@ -820,11 +820,11 @@
   // within 300 m of every position the server saw. The map adds 300 m around each place a player
   // discovered, which covers the time before the update. The combined grid follows the "by"
   // choice and is rebuilt when the data or the choice changes.
-  let EXP = null, expVersion = -1, expFetching = false, expLast = 0, expGrid = null, expGridFor = "";
+  let EXP = null, expVersion = -1, expFetching = false, expLast = 0, expGrid = null;
   const EXP_RADIUS = 300;
   function exploredGrid() {
     if (expGrid) return expGrid;
-    const names = discNames(), id = names.join("|") + "#" + expVersion + "#" + discVersion;
+    const names = discNames();
     const n = EXP ? EXP.cells : 512, cell = EXP ? EXP.cellMetres : 20, g = new Uint8Array(n * n);
     for (const name of names) {
       const bits = EXP && EXP.players[name];
@@ -844,13 +844,37 @@
       }
     }
     expGrid = { n, cell, g };
-    expGridFor = id;
     return expGrid;
   }
   function exploredAt(x, z) {
     const { n, cell, g } = exploredGrid();
     const col = Math.floor(x / cell), row = Math.floor(z / cell);
     return col >= 0 && row >= 0 && col < n && row < n && g[row * n + col] === 1;
+  }
+  // The server marks the area once a second and the page fetches it every 15 s. In between the
+  // page marks the same 300 m circle around every player it sees, so the fog and the markers
+  // follow the player at once. True when a cell was new.
+  function revealLive(name, x, z) {
+    if (!EXP || !name) return false;
+    const n = EXP.cells, cell = EXP.cellMetres;
+    let bits = EXP.players[name];
+    if (!bits) { bits = EXP.players[name] = new Uint8Array(n * n / 8); discInvalidate(); discPanel(); }
+    const g = expGrid && discNames().includes(name) ? expGrid.g : null;
+    const r = Math.ceil(EXP_RADIUS / cell), cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+    let changed = false;
+    for (let dz = -r; dz <= r; dz++) {
+      const row = cz + dz;
+      if (row < 0 || row >= n) continue;
+      const mz = (row + 0.5) * cell - z;
+      for (let dx = -r; dx <= r; dx++) {
+        const col = cx + dx, mx = (col + 0.5) * cell - x, i = row * n + col;
+        if (col < 0 || col >= n || mx * mx + mz * mz > EXP_RADIUS * EXP_RADIUS || bits[i >> 3] >> (i & 7) & 1) continue;
+        bits[i >> 3] |= 1 << (i & 7);
+        if (g) g[i] = 1;
+        changed = true;
+      }
+    }
+    return changed;
   }
   function maybeRefreshExplored(version) {
     const now = Date.now();
@@ -859,10 +883,10 @@
     expLast = now;
     fetch("explored" + q).then(r => r.ok ? r.json() : null).then(d => {
       if (!d) return;
-      const players = {};
+      const players = EXP && EXP.cells === d.cells ? EXP.players : {};
       for (const [name, b64] of Object.entries(d.players || {})) {
-        const s = atob(b64), bits = new Uint8Array(s.length);
-        for (let i = 0; i < s.length; i++) bits[i] = s.charCodeAt(i);
+        const s = atob(b64), bits = new Uint8Array(s.length), old = players[name];
+        for (let i = 0; i < s.length; i++) bits[i] = s.charCodeAt(i) | (old && old.length === s.length ? old[i] : 0);
         players[name] = bits;
       }
       EXP = { cells: d.cells, cellMetres: d.cellMetres, players };
@@ -1190,38 +1214,91 @@
   if (showShroud) shroudOverlay.addTo(map);
 
   // Fog of war: the explored grid of the chosen player(s) as a dark veil over unexplored land,
-  // in its own pane above the shroud and below weather and markers.
+  // in its own pane above the shroud and below weather and markers. As on the game's map the edge
+  // is soft (the grid blurred over about 100 m) and land clears over 0.8 s instead of at once.
+  // One canvas pixel per grid cell, stretched over the world by the browser (smoothly); an image
+  // overlay that takes a canvas, so Leaflet moves and zooms it like the other overlays.
+  const FOG_ALPHA = 190, FOG_FADE_MS = 800;
   map.createPane("fog").style.zIndex = 395;
   map.getPane("fog").style.pointerEvents = "none";
-  const fogOverlay = L.imageOverlay("data:image/gif;base64,R0lGODlhAQABAAAAACw=", [[0, 0], [10240, 10240]],
-    { pane: "fog", interactive: false });
-  let fogDrawnFor = "";
-  function drawFog() {
-    if (!showFog || (!EXP && !DISC)) return;
-    const { n, g } = exploredGrid();
-    if (fogDrawnFor === expGridFor) return;
-    fogDrawnFor = expGridFor;
-    const c = document.createElement("canvas");
-    c.width = c.height = n;
-    const ctx = c.getContext("2d"), img = ctx.createImageData(n, n), px = img.data;
-    for (let row = 0; row < n; row++) {
-      for (let col = 0; col < n; col++) {
-        if (g[row * n + col]) continue;
-        const i = 4 * ((n - 1 - row) * n + col);   // image row 0 = north
-        px[i] = 18; px[i + 1] = 14; px[i + 2] = 26; px[i + 3] = 190;
+  const CanvasOverlay = L.ImageOverlay.extend({
+    _initImage() {
+      const el = this._image = this._url;
+      L.DomUtil.addClass(el, "leaflet-image-layer");
+      if (this._zoomAnimated) L.DomUtil.addClass(el, "leaflet-zoom-animated");
+    },
+  });
+  const fog = { canvas: document.createElement("canvas"), cur: null, target: null, img: null, dirty: false, raf: 0, last: 0 };
+  const fogOverlay = new CanvasOverlay(fog.canvas, [[0, 0], [10240, 10240]], { pane: "fog", interactive: false });
+  // Explored share of the area around every cell (row 0 = south): a 5 x 5 box blur, twice, so
+  // about a Gaussian; outside the world counts as unexplored.
+  function fogTarget() {
+    const { n, g } = exploredGrid(), a = new Float32Array(n * n), b = new Float32Array(n * n), R = 2, W = 2 * R + 1;
+    for (let i = 0; i < n * n; i++) a[i] = g[i];
+    for (let pass = 0; pass < 2; pass++) {
+      for (let row = 0; row < n; row++) {            // along the rows: a -> b
+        const o = row * n;
+        let s = 0;
+        for (let col = 0; col < R; col++) s += a[o + col];
+        for (let col = 0; col < n; col++) {
+          if (col + R < n) s += a[o + col + R];
+          if (col - R - 1 >= 0) s -= a[o + col - R - 1];
+          b[o + col] = s / W;
+        }
+      }
+      for (let col = 0; col < n; col++) {            // along the columns: b -> a
+        let s = 0;
+        for (let row = 0; row < R; row++) s += b[row * n + col];
+        for (let row = 0; row < n; row++) {
+          if (row + R < n) s += b[(row + R) * n + col];
+          if (row - R - 1 >= 0) s -= b[(row - R - 1) * n + col];
+          a[row * n + col] = s / W;
+        }
       }
     }
-    ctx.putImageData(img, 0, 0);
-    c.toBlob(b => {
-      const old = fogOverlay._url;
-      fogOverlay.setUrl(URL.createObjectURL(b));
-      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
-    });
+    for (let i = 0; i < n * n; i++) a[i] = FOG_ALPHA * (1 - Math.min(1, a[i]));
+    return a;
+  }
+  function fogFrame(now) {
+    fog.raf = 0;
+    if (!showFog || (!EXP && !DISC)) return;
+    if (fog.dirty) {
+      fog.dirty = false;
+      fog.target = fogTarget();
+      const n = Math.round(Math.sqrt(fog.target.length));
+      if (!fog.cur || fog.cur.length !== fog.target.length) {   // first picture: no fade
+        fog.cur = fog.target.slice();
+        fog.canvas.width = fog.canvas.height = n;
+        fog.img = fog.canvas.getContext("2d").createImageData(n, n);
+        for (let i = 0; i < n * n; i++) { fog.img.data[4 * i] = 18; fog.img.data[4 * i + 1] = 14; fog.img.data[4 * i + 2] = 26; }
+        fog.last = now;
+      }
+    }
+    const n = fog.canvas.width, cur = fog.cur, target = fog.target, px = fog.img.data;
+    const step = FOG_ALPHA * Math.min(100, now - fog.last) / FOG_FADE_MS;
+    fog.last = now;
+    let moving = false;
+    for (let row = 0; row < n; row++) {
+      const o = (n - 1 - row) * n;                    // image row 0 = north
+      for (let col = 0; col < n; col++) {
+        const i = row * n + col, d = target[i] - cur[i];
+        if (d === 0) { px[4 * (o + col) + 3] = cur[i]; continue; }
+        cur[i] = d > step ? cur[i] + step : d < -step ? cur[i] - step : target[i];
+        if (cur[i] !== target[i]) moving = true;
+        px[4 * (o + col) + 3] = cur[i];
+      }
+    }
+    fog.canvas.getContext("2d").putImageData(fog.img, 0, 0);
+    if (moving) fog.raf = requestAnimationFrame(fogFrame);
+  }
+  function drawFog() {
+    fog.dirty = true;
+    if (!fog.raf) fog.raf = requestAnimationFrame(fogFrame);
   }
   function setFogShown(on) {
     showFog = on;
     try { localStorage.setItem("livemap.fog", on ? "1" : "0"); } catch {}
-    if (on) { fogDrawnFor = ""; fogOverlay.addTo(map); drawFog(); } else fogOverlay.remove();
+    if (on) { fog.cur = null; fogOverlay.addTo(map); drawFog(); } else fogOverlay.remove();
   }
   if (showFog) fogOverlay.addTo(map);
 
@@ -1239,7 +1316,12 @@
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
   window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode,
-    explored: (x, z) => exploredAt(x, z), exp: () => EXP };
+    explored: (x, z) => exploredAt(x, z), exp: () => EXP,
+    fogAlpha(x, z) {
+      if (!fog.cur) return null;
+      const n = fog.canvas.width, col = Math.floor(x / 10240 * n), row = Math.floor(z / 10240 * n);
+      return col >= 0 && row >= 0 && col < n && row < n ? Math.round(fog.cur[row * n + col]) : null;
+    } };
   window.livemap.shroud = { levelAt: (x, z) => shroudLevelAt(x, z), flame: () => flameLevel(), ready: () => !!SHROUD && shroudFlame === flameLevel() };
   window.livemap.weather = {
     state: () => lastState,
@@ -1280,6 +1362,9 @@
     maybeRefreshBases(state.basesVersion);
     maybeRefreshDiscovered(state.discoveredVersion);
     maybeRefreshExplored(state.exploredVersion);
+    let revealed = false;
+    for (const p of state.players) if (p.pos && revealLive(p.name, p.pos[0], p.pos[2])) revealed = true;
+    if (revealed) { drawFog(); if (discMode !== "all") poiLayer.schedule(); }
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     weatherLayer.update(state.weather);
     drawShroud();
