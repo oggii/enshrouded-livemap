@@ -1,0 +1,31 @@
+{
+ "worldTime": 3123.659,
+ "instances": [
+  {
+   "layer": 7,
+   "phenomenon": 12,
+   "spawn": [
+    2480.0,
+    5280.0
+   ],
+   "rotation": 4.221,
+   "radius": 5201.4,
+   "speed": 0.739,
+   "spawnTime": 2715.042,
+   "despawnTime": 3149.332
+  },
+  {
+   "layer": 0,
+   "phenomenon": 3,
+   "spawn": [
+    3072.7,
+    403.8
+   ],
+   "rotation": 4.5118,
+   "radius": 15001.0,
+   "speed": 16.951,
+   "spawnTime": 3039.226,
+   "despawnTime": 3313.677
+  }
+ ]
+}

@@ -105,7 +105,10 @@ stops the IP lookup entirely.
 The map is drawn from the game's own map data (the textures the in-game map is made of): height,
 relief shading, contour lines and the shroud zones, at 1 metre per pixel when zoomed in. The
 icons are the game's own map markers. `tools/render_map.py` and `tools/extract_icons.py` make
-them from the game files; see `docs/RESEARCH.md`, section 13.
+them from the game files; see `docs/RESEARCH.md`, section 13. The page wears the game's own
+map-screen look: its gold frame, separators and player arrow (`livemap/ui/`, from the client's UI
+textures) and Alegreya (`livemap/fonts/`, SIL Open Font License), the closest free match to the
+game's Harmonique Display.
 
 You can add your own map picture as a second style in `livemap/maps.json`:
 

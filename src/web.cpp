@@ -58,6 +58,8 @@ const char* content_type(const std::string& path) {
     if (ends(".jpg") || ends(".jpeg")) return "image/jpeg";
     if (ends(".webp")) return "image/webp";
     if (ends(".svg")) return "image/svg+xml";
+    if (ends(".woff2")) return "font/woff2";
+    if (ends(".txt")) return "text/plain; charset=utf-8";
     return "application/octet-stream";
 }
 

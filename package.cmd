@@ -10,7 +10,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Copy-Item build\iphlpapi.dll, package\README.txt, LICENSE, THIRD_PARTY_NOTICES.md $stage;" ^
   "New-Item -ItemType Directory \"$stage\livemap\" | Out-Null;" ^
   "Copy-Item web\index.html, web\maps.json, web\pois.json, web\pois.json.gz, web\weather.json, web\weather.json.gz, web\shroud.png \"$stage\livemap\";" ^
-  "Copy-Item web\icons, web\tiles \"$stage\livemap\" -Recurse;" ^
+  "Copy-Item web\icons, web\tiles, web\ui, web\fonts \"$stage\livemap\" -Recurse;" ^
   "$zip = \"dist\EnshroudedLiveMap-$v.zip\"; Remove-Item $zip -ErrorAction SilentlyContinue;" ^
   "& \"$env:SystemRoot\System32\tar.exe\" -a -c -f $zip -C $stage iphlpapi.dll livemap README.txt LICENSE THIRD_PARTY_NOTICES.md; if ($LASTEXITCODE) { throw 'tar failed' };" ^
   "Remove-Item $stage -Recurse -Force;" ^

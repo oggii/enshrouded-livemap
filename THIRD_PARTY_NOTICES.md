@@ -1,6 +1,8 @@
 # Third-party notices
 
-The powrprof.dll of this mod statically links the following libraries.
+The iphlpapi.dll of this mod statically links the following libraries. The web page in the
+livemap folder uses the font Alegreya (see the end of this file); its map art, icons and UI
+graphics come from Enshrouded's own game files, (c) Keen Games.
 
 ## SafetyHook (https://github.com/cursey/safetyhook), v0.7.0
 
@@ -84,3 +86,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ```
+
+## Alegreya (https://github.com/huertatipografica/Alegreya), livemap/fonts
+
+Copyright 2011 The Alegreya Project Authors. Licensed under the SIL Open Font License,
+Version 1.1; the full licence is in livemap/fonts/OFL.txt.

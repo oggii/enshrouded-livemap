@@ -7,85 +7,145 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
+  /* The look of the game's own map screen: Alegreya (closest free match to the game's
+     Harmonique Display), the game's gold filigree frame, hairlines and player arrow (ui/, from
+     the client's UI textures), diamond toggles. Font in fonts/ (SIL OFL, see fonts/OFL.txt). */
+  @font-face { font-family: "Alegreya"; src: url("fonts/alegreya-latin.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
   :root {
-    --bg: #14111c; --panel: rgba(22, 18, 32, 0.88); --line: rgba(255, 255, 255, 0.10);
-    --text: #ece6f5; --muted: #a79cbb; --accent: #f2b766; --teal: #6fd3c7; --danger: #ff7a7a;
+    --bg: #120f18; --panel: rgba(18, 14, 25, 0.94); --raised: #221b2e; --line: rgba(220, 183, 107, 0.22);
+    --text: #f3e9d4; --muted: #bcae94; --gold: #dcb76b; --gold-bright: #f6dca0; --gold-dim: #8f713a;
+    --accent: #dcb76b; --danger: #ff8f7f; --ok: #7ee2a8;
+    --serif: "Alegreya", "Noto Serif", Georgia, serif; --caps: "Alegreya", Georgia, serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  #map { position: absolute; inset: 0; background: #2a2038; }
-  .card { position: absolute; z-index: 1000; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(6px); }
-  #clock { top: 12px; right: 12px; min-width: 200px; }
-  #clock .big { font-size: 28px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
-  #clock .row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted);
-    font-variant-numeric: tabular-nums; }
-  #clock .row b { color: var(--text); font-weight: 600; }
-  #left { position: absolute; z-index: 1000; top: 12px; left: 56px; display: flex; flex-direction: column;
-    gap: 8px; align-items: flex-start; max-height: calc(100vh - 140px); }
-  #left .card { position: static; }
-  #players { max-width: 300px; }
-  #players h2, #clock h2, #calib h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    font: 500 15px/1.35 var(--serif); -webkit-font-smoothing: antialiased; }
+  #map { position: absolute; inset: 0; background: #15111d; }
+  /* The game's map vignette: the edges fall off into the dark. Own layer, so panning never repaints it. */
+  #map::after { content: ""; position: absolute; inset: 0; z-index: 450; pointer-events: none; will-change: transform;
+    background: radial-gradient(ellipse 120% 100% at 50% 50%, rgba(10, 8, 14, 0) 62%, rgba(10, 8, 14, 0.55) 88%, rgba(10, 8, 14, 0.85) 100%); }
+  .card { position: absolute; z-index: 1000; background: var(--panel); color: var(--text);
+    border: 20px solid transparent; border-image: url("ui/frame.webp") 40 / 20px / 0 stretch;
+    padding: 0 6px 2px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); }
+  .card::before { content: ""; position: absolute; inset: 0; background: url("ui/pattern.webp") center / 300px;
+    opacity: 0.06; pointer-events: none; }
+  .card > * { position: relative; }
+  h2.title, #players h2, #clock h2, #calib h2, #pois h2 { margin: 0 0 8px; padding-bottom: 9px; font: 700 12px/1.2 var(--caps);
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); background: url("ui/separator.webp") left bottom / 100% 5px no-repeat; }
+  #clock { top: 10px; right: 10px; min-width: 232px; }
+  #clock .big { font-size: 46px; font-weight: 500; line-height: 1; margin: 4px 0 10px; color: #fff4dc;
+    font-variant-numeric: oldstyle-nums; text-shadow: 0 0 18px rgba(220, 183, 107, 0.3); }
+  #clock .row { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; color: var(--muted);
+    border-top: 1px solid var(--line); font-variant-numeric: lining-nums tabular-nums; }
+  #clock .row b { color: var(--text); font-weight: 700; }
+  #left { position: absolute; z-index: 1000; top: 10px; left: 54px; display: flex; flex-direction: column;
+    gap: 8px; align-items: flex-start; max-height: calc(100vh - 120px); }
+  #left .card { position: relative; }
+  #players { max-width: 330px; min-width: 200px; }
   #players ul { list-style: none; margin: 0; padding: 0; }
-  #players li { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
-  #players li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-  #players li .coords { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  #players li .follow { display: none; margin-left: auto; font-size: 11px; color: var(--accent); }
-  #players li.following .name { color: var(--accent); }
+  #players li { display: flex; align-items: baseline; gap: 9px; padding: 3px 0; cursor: pointer; font-size: 16px; }
+  #players li .dot { width: 9px; height: 9px; flex: none; transform: rotate(45deg) translateY(-1px); box-shadow: 0 0 7px rgba(0, 0, 0, 0.6); }
+  #players li .coords { color: var(--muted); font-size: 13px; font-variant-numeric: lining-nums tabular-nums; }
+  #players li .follow { display: none; margin-left: auto; font: 700 11px var(--caps); letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+  #players li.following .name { color: var(--gold-bright); }
   #players li.following .follow { display: inline; }
-  #pois { width: 260px; min-height: 0; overflow: auto; }
+  #players li.placeholder, #players li.empty { color: var(--muted); cursor: default; }
+  #pois { width: 296px; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--gold-dim) transparent; }
   #pois.hidden { display: none; }
-  #pois h2 { display: flex; justify-content: space-between; align-items: center; }
-  #pois h2 button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit;
+  #pois h2 { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+  #pois h2 button { background: none; border: 0; color: var(--muted); cursor: pointer; font: 500 14px var(--serif);
     letter-spacing: 0; text-transform: none; padding: 0; }
-  #pois label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 13px; }
-  #pois .disc { display: flex; flex-wrap: wrap; gap: 6px; padding: 3px 0 6px; font-size: 13px; }
-  #pois select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
-    font: inherit; font-size: 12px; padding: 2px 4px; max-width: 100%; }
-  #pois .disc-note { color: var(--muted); font-size: 11px; width: 100%; }
+  #pois h2 button:hover { color: var(--gold-bright); }
+  #pois label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: 15px; }
+  #pois label:hover .t { color: var(--gold-bright); }
+  #pois .disc { display: flex; flex-wrap: wrap; gap: 6px; padding: 3px 0 6px; }
+  #pois select { background: rgba(0, 0, 0, 0.35); color: var(--text); border: 1px solid var(--line); border-radius: 0;
+    font: 500 14px var(--serif); padding: 3px 6px; max-width: 100%; }
+  #pois select:focus-visible, #pois button:focus-visible, #poiToggle:focus-visible { outline: 1px solid var(--gold-bright); outline-offset: 2px; }
+  #pois .disc-note { color: var(--muted); font-size: 13px; width: 100%; line-height: 1.3; }
+  #pois input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 11px; height: 11px; margin: 0 5px 0 3px; flex: none;
+    transform: rotate(45deg); border: 1px solid var(--gold-dim); background: rgba(0, 0, 0, 0.3); cursor: pointer;
+    transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out; }
+  #pois input[type=checkbox]:checked { background: var(--gold); border-color: var(--gold-bright); box-shadow: 0 0 8px rgba(220, 183, 107, 0.65); }
+  #pois input[type=checkbox]:focus-visible { outline: 1px solid var(--gold-bright); outline-offset: 3px; }
   #pois label .sw { width: 18px; height: 18px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
-  #pois label .sw:not(:has(img)) { width: 10px; height: 10px; margin: 0 4px; }
-  #pois label .n { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  #pois .group { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted);
-    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
-  #poiToggle { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
-    padding: 8px 12px; cursor: pointer; font: inherit; }
-  .poi-tip { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
-    padding: 2px 8px; font-size: 12px; }
+  #pois label .sw:not(:has(img)) { width: 9px; height: 9px; margin: 0 4px; }
+  #pois label .sw img { width: 18px; height: 18px; display: block; }
+  #pois label .n { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: lining-nums tabular-nums; }
+  #pois .group { margin-top: 6px; padding-top: 12px; font: 700 12px var(--caps); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
+    background: url("ui/hairline.webp") left top / 100% 2px no-repeat; }
+  #poiList > .group:first-child { margin-top: 0; padding-top: 2px; background: none; }
+  #poiToggle { background: var(--panel); color: var(--gold); text-shadow: 0 0 10px rgba(220, 183, 107, 0.35);
+    border: 1px solid var(--gold-dim); padding: 8px 22px; cursor: pointer; font: 700 13px var(--caps); letter-spacing: 0.16em; text-transform: uppercase;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); transition: color 0.15s ease-out, border-color 0.15s ease-out; }
+  #poiToggle:hover, #poiToggle[aria-expanded="true"] { color: var(--gold-bright); border-color: var(--gold); }
+  .poi-tip { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 0;
+    padding: 3px 10px; font: 500 14px var(--serif); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5); }
+  .poi-tip::before { border-top-color: var(--gold-dim) !important; }
   .poi-canvas { pointer-events: none; }
   .leaflet-overlay-pane svg path { outline: none; }
-  #pois label .sw img { width: 18px; height: 18px; display: block; }
-  @media (max-width: 900px) { #pois { max-height: 45vh; } }
-  #status { bottom: 12px; left: 12px; font-size: 12px; color: var(--muted); padding: 6px 10px; }
+  #status { top: auto; bottom: 10px; left: 10px; border: 1px solid var(--gold-dim); border-image: none; padding: 4px 12px 4px 26px;
+    font: 700 11px var(--caps); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); }
+  #status::before { inset: auto; left: 10px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; transform: rotate(45deg);
+    background: var(--ok); box-shadow: 0 0 8px var(--ok); opacity: 1; }
   #status.bad { color: var(--danger); }
-  #tileNote { top: 12px; left: 50%; transform: translateX(-50%); max-width: min(460px, calc(100vw - 32px));
-    font-size: 13px; color: var(--danger); display: none; }
+  #status.bad::before { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+  #tileNote { top: 10px; left: 50%; transform: translateX(-50%); max-width: min(460px, calc(100vw - 32px));
+    font-size: 14px; color: var(--danger); display: none; }
   #tileNote.open { display: block; }
-  #calib { bottom: 36px; right: 12px; max-width: 320px; display: none; font-size: 13px; }
+  #calib { bottom: 40px; right: 10px; max-width: 340px; display: none; font-size: 14px; }
   #calib.open { display: block; }
-  #calib textarea { width: 100%; height: 80px; background: #0d0b12; color: var(--text);
-    border: 1px solid var(--line); border-radius: 6px; font: 12px monospace; }
-  #calib button, #calibToggle { background: var(--accent); color: #1a1208; border: 0; border-radius: 6px;
-    padding: 6px 10px; font-weight: 600; cursor: pointer; margin-top: 6px; }
-  #calibToggle { position: absolute; z-index: 1000; bottom: 36px; right: 12px; }
-  .player-label { background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 6px; padding: 1px 6px; font-weight: 600; white-space: nowrap; }
+  #calib textarea { width: 100%; height: 80px; background: #0d0b12; color: var(--text); border: 1px solid var(--line); font: 12px monospace; }
+  #calib select { background: rgba(0, 0, 0, 0.35); color: var(--text); border: 1px solid var(--line); font: inherit; }
+  #calib button, #calibToggle { background: var(--gold); color: #1a1208; border: 0; padding: 6px 12px; font: 700 12px var(--caps);
+    letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; margin-top: 6px; }
+  #calibToggle { position: absolute; z-index: 1000; bottom: 40px; right: 10px; }
+  /* Players: the game's white arrow with a halo in the player's colour; names with a dark halo, as the game draws them. */
+  .player-label { background: none; border: 0; box-shadow: none; padding: 0; font: 700 15px var(--serif); color: #fff6e4; white-space: nowrap;
+    text-shadow: 0 0 3px #000, 0 0 8px rgba(0, 0, 0, 0.9), 0 1px 2px #000; }
+  .player-label::before { display: none; }
   .leaflet-container { font: inherit; }
   .player-icon { background: none; border: 0; }
-  .player-icon .arrow { width: 28px; height: 28px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); transition: transform 0.25s linear; }
-  .player-icon .arrow svg { width: 28px; height: 28px; display: block; }
-  .player-icon .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #120e18; margin: 7px; box-sizing: border-box; }
+  .player-icon .halo { position: absolute; left: -22px; top: -22px; width: 72px; height: 72px; pointer-events: none;
+    background: radial-gradient(circle, var(--c) 0, transparent 62%); opacity: 0.55; }
+  .player-icon .arrow { position: relative; width: 28px; height: 28px; transition: transform 0.25s linear; }
+  .player-icon .arrow img { position: absolute; inset: -1px; width: 30px; height: 30px; transform: rotate(-90deg);
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 5px rgba(0, 0, 0, 0.6)); }
+  .player-icon .dot { width: 14px; height: 14px; border: 2px solid #fff6e4; margin: 7px; transform: rotate(45deg); box-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
   .leaflet-container:not(.leaflet-zoom-anim) .player-icon { transition: transform 0.25s linear; }
   .leaflet-bottom.leaflet-left { margin-bottom: 44px; }
-  .leaflet-control-layers { background: var(--panel); color: var(--text); border: 1px solid var(--line) !important;
-    border-radius: 12px; padding: 4px 10px; }
+  .leaflet-control-layers { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim) !important; border-radius: 0;
+    padding: 5px 12px; font: 500 15px var(--serif); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45) !important; }
   .leaflet-control-layers label { color: var(--text); }
-  .leaflet-bar a { background: var(--panel); color: var(--text); border-color: var(--line); }
-  .leaflet-bar a:hover { background: #2a2338; color: var(--text); }
+  .leaflet-control-layers input { accent-color: var(--gold); }
+  .leaflet-bar { border: 0 !important; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45) !important; }
+  .leaflet-bar a { background: var(--panel); color: var(--gold); border: 1px solid var(--gold-dim) !important; border-radius: 0 !important;
+    font: 500 20px/28px var(--serif); margin-bottom: 4px; }
+  .leaflet-bar a:hover { background: var(--raised); color: var(--gold-bright); }
+  .leaflet-control-attribution { background: rgba(18, 14, 25, 0.75) !important; color: var(--muted) !important; font: 500 12px var(--serif); }
+  .leaflet-control-scale-line { background: rgba(18, 14, 25, 0.7); color: var(--text); border: 1px solid var(--gold-dim); border-top: 0;
+    font: 500 12px var(--serif); font-variant-numeric: lining-nums; padding: 0 6px; }
+  .leaflet-control-scale { margin-bottom: 6px !important; }
+  #compass { position: absolute; z-index: 999; right: 14px; bottom: 58px; width: 112px; height: 112px; pointer-events: none; }
+  #compass img { width: 100%; height: 100%; display: block; opacity: 0.9; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8)); }
+  #compass span { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); font: 700 14px var(--caps); letter-spacing: 0.05em; color: var(--gold-bright);
+    text-shadow: 0 0 4px #000, 0 0 8px #000; }
+  @media (prefers-reduced-motion: reduce) {
+    .player-icon .arrow, .leaflet-container:not(.leaflet-zoom-anim) .player-icon { transition: none; }
+  }
+  /* Phones: the clock shrinks to the time, the marker panel becomes a sheet at the bottom. */
   @media (max-width: 600px) {
-    #clock { min-width: 0; }
+    .card { border-width: 14px; border-image-width: 14px; }
+    #clock { top: 8px; right: 8px; min-width: 0; padding: 0 2px; }
+    #clock h2, #clock .row { display: none; }
+    #clock .big { font-size: 26px; margin: 0; }
+    #left { top: 8px; left: 50px; right: 106px; max-height: none; }
+    #players { min-width: 0; max-width: none; width: 100%; }
+    #players li { font-size: 15px; flex-wrap: wrap; column-gap: 8px; row-gap: 0; }
+    #players li .coords { font-size: 12px; }
+    #left #pois { position: fixed; left: 0; right: 0; bottom: 38px; width: auto; max-height: 55vh; z-index: 1001; }
+    body:has(#pois:not(.hidden)) .leaflet-control-layers { display: none; }   /* the sheet covers that corner */
+    #compass { display: none; }
   }
 </style>
 </head>
@@ -93,7 +153,7 @@
 <div id="map"></div>
 <div id="left">
   <div id="players" class="card"><h2>Players online</h2><ul id="playerList"><li class="placeholder">Connecting…</li></ul></div>
-  <button id="poiToggle" type="button">Markers</button>
+  <button id="poiToggle" type="button" aria-expanded="false" aria-controls="pois">Markers</button>
   <div id="pois" class="card hidden"><h2>Markers <button id="poiAll" type="button">all / none</button></h2><div id="poiList"></div></div>
 </div>
 <div id="clock" class="card">
@@ -105,6 +165,7 @@
   <div class="row"><span>Flame level</span><b id="flameLevel">–</b></div>
 </div>
 <div id="status" class="card">connecting…</div>
+<div id="compass" aria-hidden="true"><span>N</span><img src="ui/compass.webp" alt="" fetchpriority="low" decoding="async"></div>
 <div id="tileNote" class="card"></div>
 <button id="calibToggle" type="button">Calibrate</button>
 <div id="calib" class="card">
@@ -128,6 +189,7 @@
   // (10240 in Enshrouded); north (+z) is up. Each map image covers `bounds` of the world.
   const map = L.map("map", { crs: L.CRS.Simple, minZoom: -5, maxZoom: 3, zoomSnap: 0.25, attributionControl: true });
   map.attributionControl.setPrefix("").addAttribution("Map art © Keen Games");
+  L.control.scale({ position: "bottomright", imperial: false, maxWidth: 140 }).addTo(map);
   const markers = new Map();
   let lastState = null, config = null, currentStyle = null;
   let showWeather = (() => { try { return localStorage.getItem("livemap.weather") !== "0"; } catch { return true; } })();
@@ -157,10 +219,12 @@
     if (Math.abs(fx) + Math.abs(fz) < 1e-6) return null;
     return Math.atan2(fx, fz) * 180 / Math.PI;  // 0 = north (+z, up on the map), clockwise
   }
+  // The game's own player arrow (ui/player.webp points east; CSS turns it north) over a halo in
+  // the player's colour; a diamond until the first heading is known.
   function playerIcon(color) {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><path d="M14 2 L24 24 L14 18 L4 24 Z" fill="' + color + '" stroke="#120e18" stroke-width="2" stroke-linejoin="round"/></svg>';
     return L.divIcon({ className: "player-icon", iconSize: [28, 28], iconAnchor: [14, 14],
-      html: '<div class="arrow" style="display:none">' + svg + '</div><div class="dot" style="background:' + color + '"></div>' });
+      html: '<div class="halo" style="--c:' + color + '"></div><div class="arrow" style="display:none"><img src="ui/player.webp" alt=""></div>'
+        + '<div class="dot" style="background:' + color + '"></div>' });
   }
 
   // Keeps fetching until it succeeds (every 5 s), so a page opened during a server restart
@@ -360,7 +424,9 @@
   const poiEnabled = {};   // category id -> shown
   const poiImages = {};    // category id -> {img, base}
   const poiPanel = document.getElementById("pois");
-  document.getElementById("poiToggle").onclick = () => poiPanel.classList.toggle("hidden");
+  document.getElementById("poiToggle").onclick = e => {
+    e.currentTarget.setAttribute("aria-expanded", String(!poiPanel.classList.toggle("hidden")));
+  };
   function poiPrefs() { try { return JSON.parse(localStorage.getItem("livemap.pois") || "{}"); } catch { return {}; } }
   function savePoiPrefs(p) { try { localStorage.setItem("livemap.pois", JSON.stringify(p)); } catch {} }
 
@@ -385,10 +451,12 @@
       this._hits = { n: 0, x: new Float32Array(4096), y: new Float32Array(4096), r: new Float32Array(4096), p: new Array(4096) };
       this._tip = L.tooltip({ className: "poi-tip", direction: "top", offset: [0, -8] });
       this._tipOpen = false; this._zooming = false; this._pending = false;
-      this._onMove = () => this.schedule();
+      this._onMove = () => { if (this._uncovered()) this.schedule(); };
+      this._onResize = () => this.schedule();
       this._onZoomStart = () => { this._zooming = true; this._canvas.style.opacity = 0; this._leave(); };
       this._onZoomEnd = () => { this._zooming = false; this.schedule(); };
-      m.on("move resize viewreset", this._onMove);
+      m.on("move", this._onMove);
+      m.on("resize viewreset", this._onResize);
       m.on("zoomstart", this._onZoomStart);
       m.on("zoomend", this._onZoomEnd);
       m.on("mousemove", this._hover, this);
@@ -396,7 +464,8 @@
       this.schedule();
     },
     onRemove(m) {
-      m.off("move resize viewreset", this._onMove);
+      m.off("move", this._onMove);
+      m.off("resize viewreset", this._onResize);
       m.off("zoomstart", this._onZoomStart);
       m.off("zoomend", this._onZoomEnd);
       m.off("mousemove", this._hover, this);
@@ -410,6 +479,13 @@
       requestAnimationFrame(() => { this._pending = false; this.redraw(); });
     },
     invalidate() { for (const k in poiImages) { delete poiImages[k].sprite; delete poiImages[k].scaled; } this.schedule(); },
+    // The canvas reaches a fifth of the screen past every edge, so panning just moves the drawn
+    // picture with the map; it is drawn again once an edge of it would come into view.
+    _uncovered() {
+      if (!this._origin) return true;
+      const m = this._map, size = m.getSize(), o = m.layerPointToContainerPoint(this._origin);
+      return o.x > 0 || o.y > 0 || o.x + this._full.x < size.x || o.y + this._full.y < size.y;
+    },
     // The icon with its shadow is rendered once per category at twice the base size; for
     // drawing, a copy at the current size (in 2 px steps) is kept, so every point is a plain
     // unscaled blit.
@@ -462,15 +538,19 @@
     },
     _draw() {
       const m = this._map, size = m.getSize(), dpr = window.devicePixelRatio || 1, c = this._canvas;
-      if (c.width !== Math.round(size.x * dpr) || c.height !== Math.round(size.y * dpr)) {
-        c.width = Math.round(size.x * dpr); c.height = Math.round(size.y * dpr);
-        c.style.width = size.x + "px"; c.style.height = size.y + "px";
+      const pad = L.point(Math.round(size.x * 0.2), Math.round(size.y * 0.2)), full = size.add(pad.multiplyBy(2));
+      if (c.width !== Math.round(full.x * dpr) || c.height !== Math.round(full.y * dpr)) {
+        c.width = Math.round(full.x * dpr); c.height = Math.round(full.y * dpr);
+        c.style.width = full.x + "px"; c.style.height = full.y + "px";
       }
-      L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+      this._origin = m.containerPointToLayerPoint(pad.multiplyBy(-1));
+      this._pad = pad; this._full = full;
+      L.DomUtil.setPosition(c, this._origin);
       c.style.opacity = 1;
       const ctx = this._ctx;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, size.x, size.y);
+      // Drawn in container pixels of this moment (hits too); the canvas starts at -pad.
+      ctx.setTransform(dpr, 0, 0, dpr, pad.x * dpr, pad.y * dpr);
+      ctx.clearRect(-pad.x, -pad.y, full.x, full.y);
       this._hits.n = 0;
       if (!poiData) return;
       // CRS.Simple is linear, so a point's container position is origin + world * scale per axis.
@@ -479,8 +559,8 @@
       const A = m.containerPointToLatLng([0, 0]), B = m.containerPointToLatLng([1000, 1000]);
       const sx = 1000 / (B.lng - A.lng), sy = 1000 / (B.lat - A.lat);
       const ox = -A.lng * sx, oy = -A.lat * sy;
-      const scale = poiScale(), margin = 40, W = size.x + margin, H = size.y + margin;
-      const labelFont = "600 " + (12 * Math.max(0.8, scale)).toFixed(1) + "px system-ui, sans-serif";
+      const scale = poiScale(), margin = 40, X0 = -pad.x - margin, Y0 = -pad.y - margin, W = size.x + pad.x + margin, H = size.y + pad.y + margin;
+      const labelFont = "700 " + (13 * Math.max(0.8, scale)).toFixed(1) + "px Alegreya, Georgia, serif";
       const order = poiData.groups;
       const lootedSprite = poiImages.looted ? this._sprite({ id: "looted" }, 22 * scale) : null;
       if (!poiImages.looted) poiImages.looted = { img: loadImage(glyphUrl(GLYPHS.looted, "#6b6b75"), () => this.invalidate()), base: 22 };
@@ -502,7 +582,7 @@
           for (let i = 0; i < pts.length; i++) {
             const p = pts[i];
             const x = ox + p[1] * sx, y = oy + p[3] * sy;
-            if (x < -margin || y < -margin || x > W || y > H) continue;
+            if (x < X0 || y < Y0 || x > W || y > H) continue;
             if (discHidden(p)) continue;
             if (label) {
               const t = p[4].toUpperCase();
@@ -522,7 +602,9 @@
       }
     },
     _hover(e) {
-      const pt = e.containerPoint, h = this._hits;
+      const h = this._hits;
+      let pt = e.containerPoint;
+      if (this._origin) pt = pt.subtract(this._map.layerPointToContainerPoint(this._origin).add(this._pad));
       let best = -1;
       // Of all points under the cursor the most important one gets the tooltip: finds first,
       // then the panel's order (a spire before the fast travel points around it), topmost on a tie.
@@ -536,10 +618,10 @@
       if (best < 0) {
         // No marker here: rain or snow and the shroud under the cursor, if any (those layers
         // never take the pointer).
-        const ll = this._map.containerPointToLatLng(pt);
+        const ll = this._map.containerPointToLatLng(e.containerPoint);
         const tip = [weatherTip(ll), shroudTip(ll)].filter(Boolean).join("<br>");
         if (!tip) { this._leave(); return; }
-        this._tip.setLatLng(this._map.containerPointToLatLng(pt)).setContent(tip);
+        this._tip.setLatLng(ll).setContent(tip);
         if (!this._tipOpen) { this._map.openTooltip(this._tip); this._tipOpen = true; }
         this._map.getContainer().style.cursor = "";
         return;
@@ -564,6 +646,8 @@
     },
   });
   const poiLayer = new PoiLayer();
+  // Place names on the canvas use Alegreya: draw them again once the font is in.
+  if (document.fonts) document.fonts.load("700 13px Alegreya").then(() => poiLayer.schedule(), () => {});
   window.livemap = { map, poiLayer, heading(axis) { HEADING.axis = axis; try { localStorage.setItem("livemap.headingAxis", axis); } catch {} } };
 
   // Finds (livemap/finds.json via /finds): ore deposits become categories "ore:<sort>" with a
