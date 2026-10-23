@@ -75,10 +75,15 @@
   #pois .group { margin-top: 6px; padding-top: 12px; font: 700 12px var(--caps); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
     background: url("ui/hairline.webp") left top / 100% 2px no-repeat; }
   #poiList > .group:first-child { margin-top: 0; padding-top: 2px; background: none; }
+  #poiList::after { content: ""; display: block; position: sticky; bottom: -2px; height: 26px; margin-top: -8px; pointer-events: none;
+    background: linear-gradient(rgba(18, 14, 25, 0), rgba(18, 14, 25, 0.96)); }
   #poiToggle { background: var(--panel); color: var(--gold); text-shadow: 0 0 10px rgba(220, 183, 107, 0.35);
     border: 1px solid var(--gold-dim); padding: 8px 22px; cursor: pointer; font: 700 13px var(--caps); letter-spacing: 0.16em; text-transform: uppercase;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); transition: color 0.15s ease-out, border-color 0.15s ease-out; }
-  #poiToggle:hover, #poiToggle[aria-expanded="true"] { color: var(--gold-bright); border-color: var(--gold); }
+  #poiToggle:hover { color: var(--gold-bright); border-color: var(--gold); }
+  #poiToggle[aria-expanded="true"] { display: none; }
+  #pois h2 .actions { display: flex; align-items: baseline; gap: 14px; }
+  #pois h2 #poiClose { font-size: 15px; color: var(--gold); }
   .poi-tip { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 0;
     padding: 3px 10px; font: 500 14px var(--serif); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5); }
   .poi-tip::before { border-top-color: var(--gold-dim) !important; }
@@ -108,9 +113,10 @@
   .player-icon { background: none; border: 0; }
   .player-icon .halo { position: absolute; left: -22px; top: -22px; width: 72px; height: 72px; pointer-events: none;
     background: radial-gradient(circle, var(--c) 0, transparent 62%); opacity: 0.55; }
-  .player-icon .arrow { position: relative; width: 28px; height: 28px; transition: transform 0.25s linear; }
-  .player-icon .arrow img { position: absolute; inset: -1px; width: 30px; height: 30px; transform: rotate(-90deg);
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 5px rgba(0, 0, 0, 0.6)); }
+  .player-icon .arrow { position: relative; width: 28px; height: 28px; transition: transform 0.25s linear;
+    filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000) drop-shadow(0 0 5px rgba(0, 0, 0, 0.6)); }
+  .player-icon .arrow i { position: absolute; inset: -2px; transform: rotate(-90deg); background: var(--c);
+    -webkit-mask: url("ui/player.webp") center / contain no-repeat; mask: url("ui/player.webp") center / contain no-repeat; }
   .player-icon .dot { width: 14px; height: 14px; border: 2px solid #fff6e4; margin: 7px; transform: rotate(45deg); box-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
   .leaflet-container:not(.leaflet-zoom-anim) .player-icon { transition: transform 0.25s linear; }
   .leaflet-bottom.leaflet-left { margin-bottom: 44px; }
@@ -125,9 +131,11 @@
   .leaflet-control-attribution { background: rgba(18, 14, 25, 0.75) !important; color: var(--muted) !important; font: 500 12px var(--serif); }
   .leaflet-control-scale-line { background: rgba(18, 14, 25, 0.7); color: var(--text); border: 1px solid var(--gold-dim); border-top: 0;
     font: 500 12px var(--serif); font-variant-numeric: lining-nums; padding: 0 6px; }
-  .leaflet-control-scale { margin-bottom: 6px !important; }
-  #compass { position: absolute; z-index: 999; right: 14px; bottom: 58px; width: 112px; height: 112px; pointer-events: none; }
-  #compass img { width: 100%; height: 100%; display: block; opacity: 0.9; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8)); }
+  .leaflet-control-scale { margin-bottom: 8px !important; margin-right: 12px !important; }
+  #compass { position: absolute; z-index: 999; right: 20px; bottom: 64px; width: 112px; height: 112px; pointer-events: none; }
+  #compass::before { content: ""; position: absolute; inset: -16px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(10, 8, 14, 0.72) 30%, rgba(10, 8, 14, 0) 70%); }
+  #compass img { position: relative; width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8)); }
   #compass span { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); font: 700 14px var(--caps); letter-spacing: 0.05em; color: var(--gold-bright);
     text-shadow: 0 0 4px #000, 0 0 8px #000; }
   @media (prefers-reduced-motion: reduce) {
@@ -142,8 +150,8 @@
     #left { top: 8px; left: 50px; right: 106px; max-height: none; }
     #players { min-width: 0; max-width: none; width: 100%; }
     #players li { font-size: 15px; flex-wrap: wrap; column-gap: 8px; row-gap: 0; }
-    #players li .coords { font-size: 12px; }
-    #left #pois { position: fixed; left: 0; right: 0; bottom: 38px; width: auto; max-height: 55vh; z-index: 1001; }
+    #players li .coords { font-size: 13px; flex-basis: 100%; padding-left: 18px; }
+    #left #pois { position: fixed; left: 0; right: 0; bottom: 38px; width: auto; max-height: 46vh; z-index: 1001; }
     body:has(#pois:not(.hidden)) .leaflet-control-layers { display: none; }   /* the sheet covers that corner */
     #compass { display: none; }
   }
@@ -154,7 +162,7 @@
 <div id="left">
   <div id="players" class="card"><h2>Players online</h2><ul id="playerList"><li class="placeholder">Connecting…</li></ul></div>
   <button id="poiToggle" type="button" aria-expanded="false" aria-controls="pois">Markers</button>
-  <div id="pois" class="card hidden"><h2>Markers <button id="poiAll" type="button">all / none</button></h2><div id="poiList"></div></div>
+  <div id="pois" class="card hidden"><h2>Markers <span class="actions"><button id="poiAll" type="button">all / none</button><button id="poiClose" type="button" aria-label="Close the marker panel">✕</button></span></h2><div id="poiList"></div></div>
 </div>
 <div id="clock" class="card">
   <h2>Time</h2>
@@ -219,11 +227,11 @@
     if (Math.abs(fx) + Math.abs(fz) < 1e-6) return null;
     return Math.atan2(fx, fz) * 180 / Math.PI;  // 0 = north (+z, up on the map), clockwise
   }
-  // The game's own player arrow (ui/player.webp points east; CSS turns it north) over a halo in
-  // the player's colour; a diamond until the first heading is known.
+  // The game's own player arrow (ui/player.webp points east; CSS turns it north) in the player's
+  // colour over a halo of it; a diamond until the first heading is known.
   function playerIcon(color) {
     return L.divIcon({ className: "player-icon", iconSize: [28, 28], iconAnchor: [14, 14],
-      html: '<div class="halo" style="--c:' + color + '"></div><div class="arrow" style="display:none"><img src="ui/player.webp" alt=""></div>'
+      html: '<div class="halo" style="--c:' + color + '"></div><div class="arrow" style="display:none"><i style="--c:' + color + '"></i></div>'
         + '<div class="dot" style="background:' + color + '"></div>' });
   }
 
@@ -424,9 +432,10 @@
   const poiEnabled = {};   // category id -> shown
   const poiImages = {};    // category id -> {img, base}
   const poiPanel = document.getElementById("pois");
-  document.getElementById("poiToggle").onclick = e => {
-    e.currentTarget.setAttribute("aria-expanded", String(!poiPanel.classList.toggle("hidden")));
-  };
+  const poiToggle = document.getElementById("poiToggle");
+  const setPoiOpen = open => { poiPanel.classList.toggle("hidden", !open); poiToggle.setAttribute("aria-expanded", String(open)); };
+  poiToggle.onclick = () => setPoiOpen(poiPanel.classList.contains("hidden"));
+  document.getElementById("poiClose").onclick = () => { setPoiOpen(false); poiToggle.focus(); };
   function poiPrefs() { try { return JSON.parse(localStorage.getItem("livemap.pois") || "{}"); } catch { return {}; } }
   function savePoiPrefs(p) { try { localStorage.setItem("livemap.pois", JSON.stringify(p)); } catch {} }
 
