@@ -72,18 +72,18 @@ Config load_config(const std::wstring& dir) {
     GetPrivateProfileStringW(L"livemap", L"Port", L"auto", buf, 32, path.c_str());
     std::string port = narrow(buf);
     int number = std::atoi(port.c_str());
+    std::wstring json_path = dir + L"\\enshrouded_server.json";
+    if (FILE* f = _wfopen(json_path.c_str(), L"rb")) {
+        std::string json;
+        char chunk[4096];
+        size_t n;
+        while ((n = std::fread(chunk, 1, sizeof chunk, f)) > 0 && json.size() < 1 << 20) json.append(chunk, n);
+        std::fclose(f);
+        c.game_query_port = link::query_port(json);
+    }
     if (port.empty() || port == "auto" || number == 0) {
         c.port_from_game = true;
-        c.port = 0;
-        std::wstring json_path = dir + L"\\enshrouded_server.json";
-        if (FILE* f = _wfopen(json_path.c_str(), L"rb")) {
-            std::string json;
-            char chunk[4096];
-            size_t n;
-            while ((n = std::fread(chunk, 1, sizeof chunk, f)) > 0 && json.size() < 1 << 20) json.append(chunk, n);
-            std::fclose(f);
-            c.port = link::query_port(json);
-        }
+        c.port = c.game_query_port;
         if (c.port == 0) c.port = 15680;
     } else {
         c.port = number >= 1 && number <= 65535 ? number : 15680;

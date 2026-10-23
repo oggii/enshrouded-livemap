@@ -1,9 +1,13 @@
 // livemap: a live web map for an Enshrouded dedicated server (players, time of day).
 // Loaded by the server as iphlpapi.dll (Wine: WINEDLLOVERRIDES="iphlpapi=n,b"), so it can sit next
 // to mods that use powrprof.dll (Shared XP) or dinput8.dll (Quest Catch-Up).
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 
 #include <string>
+
+#include "a2s.h"
 
 #include "config.h"
 #include "log.h"
@@ -76,6 +80,55 @@ void start_link(const livemap::Config& config) {
     }).detach();
 }
 
+// Asks the server itself, like Steam's server browser does (A2S_INFO on the game's query port), for
+// the keywords that start with the world's Flame level. -1 when there is no answer.
+int query_flame_level(int port) {
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return -1;
+    DWORD timeout = 2000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof timeout);
+    sockaddr_in to{};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(static_cast<u_short>(port));
+    inet_pton(AF_INET, "127.0.0.1", &to.sin_addr);
+    std::string challenge;
+    int level = -1;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const std::string request = livemap::a2s::info_request(challenge);
+        sendto(s, request.data(), static_cast<int>(request.size()), 0, reinterpret_cast<const sockaddr*>(&to), sizeof to);
+        char buf[1400];
+        int n = recv(s, buf, sizeof buf, 0);
+        if (n <= 0) break;
+        const std::string reply(buf, static_cast<size_t>(n));
+        challenge = livemap::a2s::challenge_of(reply);
+        if (!challenge.empty()) continue;  // the server wants its challenge sent back first
+        level = livemap::a2s::flame_level(livemap::a2s::keywords_of(reply));
+        break;
+    }
+    closesocket(s);
+    return level;
+}
+
+void start_flame_level(int query_port) {
+    if (query_port <= 0) {
+        livemap::log("FLAME level unknown: no queryPort in enshrouded_server.json");
+        return;
+    }
+    std::thread([query_port] {
+        int misses = 0;
+        for (;;) {
+            int level = query_flame_level(query_port);
+            if (level >= 0) {
+                livemap::world::set_flame_level(level);
+                misses = 0;
+            } else if (++misses == 5) {
+                livemap::log("FLAME level: no answer on query port %d yet (UDP, 127.0.0.1)", query_port);
+            }
+            Sleep(level >= 0 ? 60'000 : 15'000);
+        }
+    }).detach();
+}
+
 DWORD WINAPI start(LPVOID) {
     std::wstring dir = exe_dir();
     livemap::Config config = livemap::load_config(dir);
@@ -127,6 +180,7 @@ DWORD WINAPI start(LPVOID) {
         return 0;
     }
     start_link(config);
+    start_flame_level(config.game_query_port);
     if (config.announce_in_chat) {
         const int port = config.port;
         livemap::install_announce(base, [port] { return livemap::link::chat_line(current_link(), port); });

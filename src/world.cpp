@@ -591,6 +591,13 @@ void refresh_players() {
     }
 }
 
+std::atomic<int> g_flame_level{-1};
+
+void set_flame_level(int level) {
+    int previous = g_flame_level.exchange(level, std::memory_order_relaxed);
+    if (previous != level) log("FLAME level %d (from the server's A2S_INFO)", level);
+}
+
 std::string snapshot_json() {
     const uint64_t now = GetTickCount64();
     std::string out = "{\"time\":";
@@ -649,7 +656,9 @@ std::string snapshot_json() {
     out += "],\"weather\":";
     append_weather(out);
     out += ",\"findsVersion\":" + std::to_string(g_finds.version());
-    out += ",\"basesVersion\":" + std::to_string(g_bases.version(GetTickCount64())) + "}";
+    out += ",\"basesVersion\":" + std::to_string(g_bases.version(GetTickCount64()));
+    const int flame = g_flame_level.load(std::memory_order_relaxed);
+    out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null")) + "}";
     return out;
 }
 

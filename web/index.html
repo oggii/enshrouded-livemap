@@ -98,6 +98,7 @@
   <div class="row"><span>In game</span><b id="dayNight">–</b></div>
   <div class="row"><span>Real time</span><b id="realTime">--:--</b></div>
   <div class="row"><span>Weather</span><b id="weather">–</b></div>
+  <div class="row"><span>Flame level</span><b id="flameLevel">–</b></div>
 </div>
 <div id="status" class="card">connecting…</div>
 <div id="tileNote" class="card"></div>
@@ -126,6 +127,7 @@
   const markers = new Map();
   let lastState = null, config = null, currentStyle = null;
   let showWeather = (() => { try { return localStorage.getItem("livemap.weather") !== "0"; } catch { return true; } })();
+  let showShroud = (() => { try { return localStorage.getItem("livemap.shroud") !== "0"; } catch { return true; } })();
   const layers = {};
 
   function toLatLng(pos) { return L.latLng(pos[2], pos[0]); }
@@ -526,9 +528,10 @@
         if (best < 0 || rank(h.p[i]) < rank(h.p[best])) best = i;
       }
       if (best < 0) {
-        // No marker here: rain or snow under the cursor, if any (the weather layer itself never
-        // takes the pointer).
-        const tip = weatherTip(this._map.containerPointToLatLng(pt));
+        // No marker here: rain or snow and the shroud under the cursor, if any (those layers
+        // never take the pointer).
+        const ll = this._map.containerPointToLatLng(pt);
+        const tip = [weatherTip(ll), shroudTip(ll)].filter(Boolean).join("<br>");
         if (!tip) { this._leave(); return; }
         this._tip.setLatLng(this._map.containerPointToLatLng(pt)).setContent(tip);
         if (!this._tipOpen) { this._map.openTooltip(this._tip); this._tipOpen = true; }
@@ -685,14 +688,20 @@
     hb.onchange = () => { hideLooted = hb.checked; try { localStorage.setItem("livemap.hideLooted", hideLooted ? "1" : "0"); } catch {} poiLayer.redraw(); };
     const lootHeader = [...list.querySelectorAll(".group")].find(h => h.textContent === "Loot");
     if (lootHeader) { const next = [...list.children].slice([...list.children].indexOf(lootHeader) + 1).find(e => e.classList.contains("group")); list.insertBefore(hide, next || null); }
-    // Weather overlay on or off (the player list keeps its weather text either way).
-    const wxHead = document.createElement("div"); wxHead.className = "group"; wxHead.textContent = "Weather";
+    // Overlays on or off (the clock keeps its weather text either way).
+    const wxHead = document.createElement("div"); wxHead.className = "group"; wxHead.textContent = "Overlays";
     const wx = document.createElement("label");
     wx.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#5aa0ff"></span><span class="t">Rain and snow</span>';
     const wb = wx.querySelector("input");
     wb.checked = showWeather;
     wb.onchange = () => { setWeatherShown(wb.checked); };
-    list.prepend(wxHead, wx);
+    const sh = document.createElement("label");
+    sh.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#ff3caa"></span><span class="t" id="shroudLabel">Deadly shroud</span>';
+    const sb = sh.querySelector("input");
+    sb.checked = showShroud;
+    sb.onchange = () => { setShroudShown(sb.checked); };
+    list.prepend(wxHead, wx, sh);
+    shroudLabel();
     document.getElementById("poiAll").onclick = () => {
       const boxes = [...list.querySelectorAll("input:not([data-extra])")];
       const turnOn = boxes.some(b => !b.checked);
@@ -961,6 +970,80 @@
       ctx.drawImage(this._grid, a.x, a.y, b.x - a.x, b.y - a.y);
     },
   });
+  // Deadly shroud: every shroud zone's level from the game's map data (shroud.png, 2048 x 2048,
+  // 5 m per pixel, row 0 = north; tools/extract_shroud.py) against the world's Flame level the
+  // server reports. As on the game's map, a zone above the Flame level gets the pink "dangerous"
+  // look; the base map already shows the normal shroud. Own pane under the weather and markers.
+  let SHROUD = null;            // { n, level: Uint8Array }
+  let shroudFlame;              // the Flame level the overlay was last drawn for
+  map.createPane("shroud").style.zIndex = 390;
+  map.getPane("shroud").style.pointerEvents = "none";
+  const shroudOverlay = L.imageOverlay("data:image/gif;base64,R0lGODlhAQABAAAAACw=", [[0, 0], [10240, 10240]],
+    { pane: "shroud", interactive: false });
+  function flameLevel() { return lastState && Number.isInteger(lastState.flameLevel) ? lastState.flameLevel : null; }
+  function shroudLabel() {
+    const el = document.getElementById("shroudLabel");
+    if (!el) return;
+    const flame = flameLevel();
+    el.textContent = flame !== null ? "Deadly shroud (above Flame level " + flame + ")"
+      : lastState && !("flameLevel" in lastState) ? "Deadly shroud (needs the server part 1.4)" : "Deadly shroud";
+  }
+  function drawShroud() {
+    const flame = flameLevel();
+    if (!SHROUD || flame === shroudFlame) return;
+    shroudFlame = flame;
+    shroudLabel();
+    const n = SHROUD.n, c = document.createElement("canvas");
+    c.width = c.height = n;
+    const ctx = c.getContext("2d"), img = ctx.createImageData(n, n), px = img.data;
+    if (flame !== null) {
+      for (let i = 0; i < n * n; i++) {
+        const l = SHROUD.level[i];
+        if (l >= 1 && l <= 10 && l > flame) { px[4 * i] = 255; px[4 * i + 1] = 60; px[4 * i + 2] = 170; px[4 * i + 3] = 115; }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    c.toBlob(b => {
+      const old = shroudOverlay._url;
+      shroudOverlay.setUrl(URL.createObjectURL(b));
+      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
+    });
+  }
+  function shroudLevelAt(x, z) {
+    if (!SHROUD) return 0;
+    const n = SHROUD.n, col = Math.floor(x / 10240 * n), row = Math.floor((1 - z / 10240) * n);
+    if (col < 0 || row < 0 || col >= n || row >= n) return 0;
+    const l = SHROUD.level[row * n + col];
+    return l >= 1 && l <= 10 ? l : 0;
+  }
+  function shroudTip(latlng) {
+    if (!showShroud) return null;
+    const l = shroudLevelAt(latlng.lng, latlng.lat);
+    if (!l) return null;
+    const flame = flameLevel();
+    return "Shroud level " + l + (flame === null ? "" : l > flame ? " · deadly at Flame level " + flame : " · Flame level " + flame + " is enough");
+  }
+  function setShroudShown(on) {
+    showShroud = on;
+    try { localStorage.setItem("livemap.shroud", on ? "1" : "0"); } catch {}
+    if (on) shroudOverlay.addTo(map); else shroudOverlay.remove();
+  }
+  fetch("shroud.png" + q).then(r => r.ok ? r.blob() : null)
+    .then(b => b && createImageBitmap(b, { colorSpaceConversion: "none", premultiplyAlpha: "none" }))
+    .then(bmp => {
+      if (!bmp) return;
+      const c = document.createElement("canvas");
+      c.width = bmp.width; c.height = bmp.height;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0);
+      const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data, level = new Uint8Array(bmp.width * bmp.height);
+      for (let i = 0; i < level.length; i++) level[i] = d[4 * i];
+      SHROUD = { n: bmp.width, level };
+      shroudFlame = undefined;
+      drawShroud();
+    }).catch(() => {});
+  if (showShroud) shroudOverlay.addTo(map);
+
   const weatherLayer = new WeatherLayer();
   function setWeatherShown(on) {
     showWeather = on;
@@ -974,6 +1057,7 @@
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
+  window.livemap.shroud = { levelAt: (x, z) => shroudLevelAt(x, z), flame: () => flameLevel(), ready: () => !!SHROUD && shroudFlame === flameLevel() };
   window.livemap.weather = {
     state: () => lastState,
     weights: pos => weatherWeights(lastState.weather, pos[0], pos[1], pos[2]),
@@ -1013,6 +1097,10 @@
     maybeRefreshBases(state.basesVersion);
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     weatherLayer.update(state.weather);
+    drawShroud();
+    const flameText = flameLevel() !== null ? String(flameLevel()) : "–";
+    const flameEl = document.getElementById("flameLevel");
+    if (flameEl.textContent !== flameText) flameEl.textContent = flameText;
     const firstWithPos = state.players.find(p => p.pos);
     const here = firstWithPos ? weatherLabel(state.weather, firstWithPos.pos) : null;
     const zones = activeZones(state.weather);

@@ -8,6 +8,7 @@ struct Config {
     bool enabled = true;
     int port = 15680;            // TCP port of the web map
     bool port_from_game = false; // Port=auto: the game's queryPort number (TCP)
+    int game_query_port = 0;     // queryPort from enshrouded_server.json (UDP, Steam queries); 0 = unknown
     std::string public_url;      // PublicUrl=, e.g. https://map.example.com; empty = detect
     bool detect_public_address = true;
     bool announce_in_chat = true;

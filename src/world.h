@@ -21,6 +21,9 @@ void refresh_players();
 // The current state as JSON for the web page.
 std::string snapshot_json();
 
+// The world's Flame level as the server reports it to Steam (-1 = not known yet); main.cpp sets it.
+void set_flame_level(int level);
+
 // One log line with the time of day and every player's position (diagnostics).
 void log_diagnostics();
 

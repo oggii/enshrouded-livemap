@@ -360,3 +360,19 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   account names (S2BH record: account id hash -> display name, e.g. "SS Kommandozentrale",
   "Cybertonic", "FindOnePiece"). The local character saves (Steam userdata 1203620, last written
   before the name was seen) had no hit either. Open: whether other players see such a name.
+
+## 17. Flame level and deadly shroud (23 Oct 2026)
+
+- Every shroud zone has a level 1..10 (channel 1 of the FogZone textures, section 13). The game
+  draws a zone with `fogZoneDangerous` (pink) when its level is above the world's Flame level
+  (shroud passage level; upgrading the Flame Altar turns deadly shroud normal). `web/shroud.png`
+  (2048^2, 5 m per pixel) holds the levels; the page compares them with the Flame level.
+- The server tells Steam the Flame level itself: A2S_INFO on the query port carries keywords
+  `3;1273043;1;0;1;1;1;0;0`, first = Flame level (3 on our world, matching the game's Game
+  Progress panel), second = the game's build number; the order matches `keen::GameParameters`
+  {flameLevel, gameSettingsPreset, voiceChatMode, isVoiceChatEnabled, isTextChatEnabled}. The DLL
+  asks 127.0.0.1:<queryPort> once a minute (works under Wine) and puts `flameLevel` in /state.
+- Marker discovery (for a Known/Undiscovered filter, Nexus request 23 Oct): marker entities carry
+  `MapMarkerUnlockRequirements` (hint/visible/completed knowledge requirements) and
+  `MapMarkerVisibilityState` {visibility, lastChange, knowledgeChangeCounter} plus a
+  `MapMarkerToggleState.visibilityMap`; to be read from the server's ECS like the build zones.

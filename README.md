@@ -118,7 +118,9 @@ If it does not sit right, open the map with `&calibrate` added to the link and f
 Looted chests show as looted for 30 minutes, then as full again (what players see on dedicated
 servers; the game data has no fixed time). Chests inside a Flame Altar's build zone stay looted.
 Change the time with `"chestRefillMinutes": 60` at the top level of `maps.json`; `0` = never.
-The marker panel has a switch for the rain and snow overlay.
+The marker panel has switches for the rain and snow overlay and for deadly shroud: shroud zones
+above the world's Flame level, drawn pink as on the game's map (zone levels from the game's map
+data, `tools/extract_shroud.py`; the Flame level is the first keyword of the server's A2S_INFO).
 
 Click a player in the list to follow them (click again or drag the map to stop). Add
 `&follow=<name>` to the link to follow that player whenever they are online.
