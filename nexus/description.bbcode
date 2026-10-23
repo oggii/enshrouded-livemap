@@ -7,17 +7,20 @@ A live map of your server in the browser. Everyone with the link sees who is onl
 
 [size=4][b]Main features[/b][/size]
 [list]
+[*][b]The game's own look:[/b] the map screen of the game in your browser: its gold frames, separators and player arrows, a matching serif type, a compass rose and a scale in metres. On phones the panels fold into a compact layout.[/*]
 [*][b]Players live:[/b] names, positions and an arrow for the walking direction, updated four times a second. Click a name to follow that player; a link with &follow=<name> does it for a second screen.
 [*][b]Time and weather:[/b] in-game clock with day and night, real time, and rain and snow drawn exactly where they fall, computed with the game's own weather rules (regions, fade in and out, snow line). Hover over the rain for its strength, time left and drift. One switch hides the weather.
 [*][b]Deadly shroud:[/b] the shroud zones above your world's Flame level are drawn pink, as on the game's own map, with their own switch; hover a zone for its level. The Flame level comes straight from the server and also shows next to the clock.[/*]
+[*][b]Region names:[/b] Springlands, Revelwood, Kindlewastes and the rest, the game's own region labels in large letters when you zoom out.[/*]
 [*][b]All map markers from the game's own data:[/b] over 3,500 points in 28 categories with the game's icons, with the game's own names on hover ("Ancient Spire · Revelwood"), each category can be switched on and off: Ancient Spires and fast travel points (only the real destinations, as on the game's own map), Flame Shrines, Elixir Wells, towns, dungeons, Night Temples, caves, mines, Gem Forges, obelisks, hidden graves, Shroud nests, enemy camps, boss unlocks, gold, silver and wooden chests, sarcophagi, treasure fishing spots and more.
 [*][b]Discovered places:[/b] show all places, only the discovered ones or only the ones not discovered yet, by anyone or by one player. Towns, dungeons, camps and the like use the game's own state, read from the server; every other marker counts as discovered within 300 m of where that player has been. Players keep their discoveries on the map after logging out. The tooltip says who discovered a place.[/*]
 [*][b]Fog of war:[/b] darkens everything the chosen player has not explored yet, with a soft edge that clears live while they move. The game keeps its real fog on each player's PC, so the map builds its own from where the server saw them, with the game's own reveal radius of 300 m.[/*]
 [*][b]Your Flame Altars live:[/b] every altar the players built shows up on the map with the game's altar icon and the size of its build zone, straight from the server. Build a new one and it appears within seconds; take one down and it disappears. The game's own starting altar is there too.
-[*][b]Ore map that fills itself:[/b] when a player mines copper, iron, sulfur, flint, crystals or any of 21 deposit kinds, the vein appears on the map with its own icon, who found it and how often it was mined. Shared by everyone, saved across restarts.
+[*][b]Ore map that fills itself:[/b] when a player mines copper, iron, sulfur, flint, clay, crystals or any of 22 deposit kinds, the vein appears on the map with its own icon, who found it and how often it was mined. Shared by everyone, saved across restarts.
 [*][b]Looted chests:[/b] a chest someone opened turns grey with a check mark (with name and time) and shows as full again after 30 minutes, when it refills (adjustable; chests inside a Flame Altar's build zone stay looted). One switch hides all looted chests.
 [*][b]The game's own map:[/b] drawn from the map data inside the game (height, relief, contour lines, Shroud zones), sharp down to 1 metre per pixel when you zoom in. Only the part you look at is loaded.
 [*][b]Fast:[/b] thousands of markers on one canvas, smooth panning and zooming, also on phones.
+[*][b]Your layout:[/b] drag the player list, clock or marker panel by its title to where it suits you; your browser remembers it, a double-click puts it back.[/*]
 [*][b]Optional HD map style[/b] (separate file): a colourful map picture by Nick, made sharp with the game's own relief. Switch between the game map and HD at the bottom left.
 [*][b]Your own map picture:[/b] add any map image as a second style in [i]livemap/maps.json[/i]; a calibration helper lines it up.
 [/list]
