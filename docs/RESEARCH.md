@@ -393,5 +393,10 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   - Confirmed by a real discovery: the player reached Riverreach (wetlands town 02, visible id
     7d496e64); the key was in neither earlier dump and appeared in the next one at index 1076 with
     value 1 (map 1245 -> 1249 entries), in both copies.
-  - Open: a stable way for the DLL to find each player's map (static RE of the code that fills
-    it, e.g. the users of the 11000 capacity), and which slot a record belongs to.
+  - Path found (static RE + dump): constructor FUN_1406e7c70 builds 16 records at object+0x660,
+    stride 0x5620; accessor FUN_1407049f0 indexes record = object + (handle & 0x3f) * 0x5620 and
+    uses +0x5b70. The object is at [player manager + 0x1c8] (manager = rcx of the player_table
+    hook). Keys {ptr, count, capacity 11000} at record+0x5b78, values at record+0x5ba0. The DLL
+    reads them every 5 s for each player in game (src/world.cpp refresh_discovered), checks the
+    capacity is 11000 (else logs DISCOVERED layout not recognised and stops), and serves the set
+    keys at /discovered; tools/extract_pois.py writes discoveryKeys (point index -> key).

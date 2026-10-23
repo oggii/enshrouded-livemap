@@ -163,6 +163,12 @@ def chest_category(name):
     return cat, ", ".join(flags)
 
 
+# Template name -> the knowledge key that marks it discovered for a player: its
+# (Runtime)MapMarkerUnlockRequirements.visibleStateQuery when that is a SimpleBool (docs/RESEARCH.md
+# section 17). Filled by load_templates.
+VISIBLE_KEYS = {}
+
+
 def load_templates(server_dir, names=None):
     """names: optional (GameTexts, {marker type guid: type name}) for the game's own names."""
     templates = {}
@@ -174,6 +180,11 @@ def load_templates(server_dir, names=None):
         name = d.get("name") or ""
         comps = d.get("components") or []
         marker = next((c["$value"] for c in comps if c.get("$type") == "keen::ecs::MapMarker"), None)
+        unlock = next((c["$value"] for c in comps if c.get("$type", "").endswith("MapMarkerUnlockRequirements")), None)
+        if unlock:
+            q = unlock.get("visibleStateQuery") or {}
+            if q.get("type") == "SimpleBool" and (q.get("knowledgeOrQueryId") or {}).get("value"):
+                VISIBLE_KEYS[name] = q["knowledgeOrQueryId"]["value"]
         cat, flags = (MARKER_TYPES.get(marker["markerType"]), "") if marker else chest_category(name)
         # The game's own first Flame Altar (Awakening Chamber): a fast travel destination with the
         # spawn altar icon on the game's map, but its template carries the platform marker type.
@@ -263,21 +274,27 @@ def main():
     for cat, c in per_cat.items():
         defaults[cat] = c.most_common(1)[0][0]
     pois = []
-    for cat, x, y, z, label, _ in instances:
+    key_of = {}
+    for cat, x, y, z, label, name in instances:
         entry = [CAT_INDEX[cat], x, y, z]
         if label != defaults[cat]:
             entry.append(label)
         pois.append(entry)
+        if name in VISIBLE_KEYS:
+            key_of[id(entry)] = VISIBLE_KEYS[name]
     pois.sort(key=lambda e: (e[0], e[1], e[3]))
+    # Point index -> knowledge key that marks it discovered (the page's Known / Undiscovered filter).
+    discovery = {str(i): key_of[id(e)] for i, e in enumerate(pois) if id(e) in key_of}
     data = {"categories": [{"id": c, "label": l, "color": col, "on": on, "label_default": defaults.get(c, l)}
                            for c, l, col, on in CATEGORIES],
-            "pois": pois}
+            "pois": pois, "discoveryKeys": discovery}
     text = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(text)
     import gzip
     with gzip.open(a.out + ".gz", "wb", compresslevel=9) as f:
         f.write(text.encode("utf-8"))
+    print(f"{len(discovery)} points with a discovery key", file=sys.stderr)
     print(f"wrote {len(pois)} pois to {a.out} ({len(text) // 1024} KB, {os.path.getsize(a.out + '.gz') // 1024} KB gzipped)",
           file=sys.stderr)
 

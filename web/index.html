@@ -41,6 +41,10 @@
   #pois h2 button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit;
     letter-spacing: 0; text-transform: none; padding: 0; }
   #pois label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 13px; }
+  #pois .disc { display: flex; flex-wrap: wrap; gap: 6px; padding: 3px 0 6px; font-size: 13px; }
+  #pois select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; font-size: 12px; padding: 2px 4px; max-width: 100%; }
+  #pois .disc-note { color: var(--muted); font-size: 11px; width: 100%; }
   #pois label .sw { width: 18px; height: 18px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
   #pois label .sw:not(:has(img)) { width: 10px; height: 10px; margin: 0 4px; }
   #pois label .n { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -498,6 +502,7 @@
             const p = pts[i];
             const x = ox + p[1] * sx, y = oy + p[3] * sy;
             if (x < -margin || y < -margin || x > W || y > H) continue;
+            if (discHidden(p)) continue;
             if (label) {
               const t = p[4].toUpperCase();
               ctx.strokeText(t, x, y); ctx.fillText(t, x, y);
@@ -547,7 +552,7 @@
             + (st.never ? " · in a base: does not refill" : " · refills in about " + st.left + " min")
           : " · looted by " + record.by + " " + fmtAgo(record.at) + ", should be full again";
       }
-      this._tip.setLatLng([p[3], p[1]]).setContent(p[4] + " · " + p[2].toFixed(0) + " m" + lootText
+      this._tip.setLatLng([p[3], p[1]]).setContent(p[4] + " · " + p[2].toFixed(0) + " m" + lootText + discText(p)
         + (under > 1 ? " · +" + (under - 1) + " more here" : ""));
       if (!this._tipOpen) { this._map.openTooltip(this._tip); this._tipOpen = true; }
       this._map.getContainer().style.cursor = "pointer";
@@ -702,6 +707,16 @@
     sb.onchange = () => { setShroudShown(sb.checked); };
     list.prepend(wxHead, wx, sh);
     shroudLabel();
+    const dHead = document.createElement("div"); dHead.className = "group"; dHead.textContent = "Discovered";
+    const dRow = document.createElement("div"); dRow.className = "disc";
+    dRow.innerHTML = '<select id="discMode"><option value="all">All places</option><option value="known">Discovered</option>'
+      + '<option value="unknown">Not discovered</option></select><select id="discBy"></select><span class="disc-note" id="discNote"></span>';
+    sh.after(dHead, dRow);
+    const modeSel = dRow.querySelector("#discMode"), bySel = dRow.querySelector("#discBy");
+    modeSel.value = discMode;
+    modeSel.onchange = () => { discMode = modeSel.value; try { localStorage.setItem("livemap.discMode", discMode); } catch {} poiLayer.invalidate(); };
+    bySel.onchange = () => { discBy = bySel.value; try { localStorage.setItem("livemap.discBy", discBy); } catch {} poiLayer.invalidate(); };
+    discPanel();
     document.getElementById("poiAll").onclick = () => {
       const boxes = [...list.querySelectorAll("input:not([data-extra])")];
       const turnOn = boxes.some(b => !b.checked);
@@ -712,6 +727,8 @@
   let rawPoiData = null;
   function rebuildPois() {
     const data = JSON.parse(JSON.stringify(rawPoiData));
+    // Discovery keys belong to the pois.json order, so attach them before altars and finds append.
+    for (const [i, k] of Object.entries(data.discoveryKeys || {})) if (data.pois[+i]) data.pois[+i].k = k;
     applyBases(data, basesData);
     applyFinds(data, findsData);
     poiData = data;
@@ -742,6 +759,54 @@
     fetch("finds" + q).then(r => r.ok ? r.json() : null).then(finds => {
       if (finds) { findsData = finds; findsVersion = finds.version; rebuildPois(); }
     }).catch(() => {}).finally(() => { findsFetching = false; });
+  }
+
+  // Discovered markers (/discovered): per player the knowledge keys the server has set; a point
+  // with a discovery key (pois.json discoveryKeys) is discovered when its key is in the set. Players
+  // keep their set after logging out. Points without a key are never filtered.
+  let DISC = null, discVersion = -1, discFetching = false;
+  let discMode = (() => { try { return localStorage.getItem("livemap.discMode") || "all"; } catch { return "all"; } })();
+  let discBy = (() => { try { return localStorage.getItem("livemap.discBy") || ""; } catch { return ""; } })();
+  function discNames() { return DISC ? (discBy && DISC.players[discBy] ? [discBy] : Object.keys(DISC.players)) : []; }
+  function discKnown(p) {
+    if (!DISC || p.k === undefined) return null;
+    return discNames().some(n => DISC.players[n].keys.has(p.k));
+  }
+  function discHidden(p) {
+    if (discMode === "all" || p.k === undefined || !DISC || !Object.keys(DISC.players).length) return false;
+    return discMode === "known" ? !discKnown(p) : discKnown(p);
+  }
+  function discText(p) {
+    if (!DISC || p.k === undefined || !Object.keys(DISC.players).length) return "";
+    const by = Object.keys(DISC.players).filter(n => DISC.players[n].keys.has(p.k));
+    return by.length ? " · discovered by " + by.join(", ") : " · not discovered yet";
+  }
+  function discPanel() {
+    const bySel = document.getElementById("discBy"), note = document.getElementById("discNote");
+    if (!bySel) return;
+    const names = DISC ? Object.keys(DISC.players).sort() : [];
+    const want = ['<option value="">by anyone</option>'].concat(names.map(n =>
+      '<option value="' + n.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + '">by ' + n.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      + (DISC.players[n].online ? "" : " (offline)") + "</option>")).join("");
+    if (bySel.innerHTML !== want) { bySel.innerHTML = want; bySel.value = DISC && DISC.players[discBy] ? discBy : ""; }
+    const count = Object.keys((rawPoiData && rawPoiData.discoveryKeys) || {}).length;
+    note.textContent = !DISC ? "Needs the server part 1.5." : !names.length ? "Nobody has played since the update."
+      : count + " places know their discovery; others always show.";
+    document.getElementById("discMode").disabled = !DISC || !names.length;
+    bySel.disabled = !DISC || !names.length;
+  }
+  function maybeRefreshDiscovered(version) {
+    if (version === undefined || version === discVersion || discFetching) return;
+    discFetching = true;
+    fetch("discovered" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      const players = {};
+      for (const [name, v] of Object.entries(d.players || {})) players[name] = { online: v.online, at: v.at, keys: new Set(v.keys) };
+      DISC = { players };
+      discVersion = d.version;
+      discPanel();
+      poiLayer.invalidate();
+    }).catch(() => {}).finally(() => { discFetching = false; });
   }
 
   let basesFetching = false;
@@ -1057,6 +1122,7 @@
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
+  window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode };
   window.livemap.shroud = { levelAt: (x, z) => shroudLevelAt(x, z), flame: () => flameLevel(), ready: () => !!SHROUD && shroudFlame === flameLevel() };
   window.livemap.weather = {
     state: () => lastState,
@@ -1095,6 +1161,7 @@
     lastState = state;
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
+    maybeRefreshDiscovered(state.discoveredVersion);
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     weatherLayer.update(state.weather);
     drawShroud();

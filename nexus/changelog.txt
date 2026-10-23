@@ -1,3 +1,11 @@
+1.5.0 (not released yet)
+- Discovered places: the marker panel can show all places, only the ones discovered, or only the
+  ones not discovered yet, by anyone or by one player. It is the game's own state: the server
+  keeps which places each player has discovered, and the map reads it (297 map places carry
+  it; chests, ore and the like always show). Players keep their discoveries on the map after
+  logging out (saved in livemap/discovered.json). The tooltip says who discovered a place.
+  Discovered=0 in livemap.ini turns it off. Needs the server part (iphlpapi.dll) of 1.5.0.
+
 1.4.0
 - Deadly shroud: shroud zones above your world's Flame level are drawn pink, as on the game's
   own map, with their own switch under Overlays. Hover a shroud zone for its level. The level of

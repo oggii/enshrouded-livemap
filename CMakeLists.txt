@@ -15,7 +15,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(safetyhook)
 
-add_library(livemap_core STATIC src/scan.cpp src/finds.cpp src/link.cpp src/text.cpp src/bases.cpp src/a2s.cpp)
+add_library(livemap_core STATIC src/scan.cpp src/finds.cpp src/link.cpp src/text.cpp src/bases.cpp src/a2s.cpp src/discovered.cpp)
 target_include_directories(livemap_core PUBLIC src)
 
 # The DLL is named iphlpapi.dll because the server loads it in place of the real one.
@@ -55,6 +55,9 @@ add_test(NAME bases COMMAND bases_test)
 add_executable(a2s_test tests/a2s_test.cpp)
 target_link_libraries(a2s_test PRIVATE livemap_core)
 add_test(NAME a2s COMMAND a2s_test)
+add_executable(discovered_test tests/discovered_test.cpp)
+target_link_libraries(discovered_test PRIVATE livemap_core)
+add_test(NAME discovered COMMAND discovered_test)
 
 add_executable(livemap_selftest tools/selftest.cpp)
 target_link_libraries(livemap_selftest PRIVATE livemap_core)

@@ -22,6 +22,7 @@
 #include <mutex>
 
 #include <cstdio>
+#include <ctime>
 #include <thread>
 
 namespace {
@@ -173,6 +174,23 @@ DWORD WINAPI start(LPVOID) {
             livemap::log("finds: could not read livemap\\finds.json, starting empty (file left as is)");
         }
     }
+    const std::wstring discovered_path = dir + L"\\livemap\\discovered.json";
+    if (config.discovered) {
+        if (FILE* f = _wfopen(discovered_path.c_str(), L"rb")) {
+            std::string text;
+            char buf[65536];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) text.append(buf, n);
+            std::fclose(f);
+            if (livemap::world::discovered_store().from_json(text)) {
+                livemap::log("discovered: %zu players loaded", livemap::world::discovered_store().players());
+            }
+        }
+    } else {
+        livemap::log("discovered markers off in livemap.ini (Discovered=0)");
+    }
+    uint64_t discovered_saved = livemap::world::discovered_store().version();
+    uint64_t last_discovered = 0;
     uint64_t saved_version = livemap::world::store().version();
     uint64_t last_save = 0;
     if (!livemap::web::start(config, dir, error)) {
@@ -202,6 +220,22 @@ DWORD WINAPI start(LPVOID) {
             }
             if (ok && MoveFileExW(tmp.c_str(), finds_path.c_str(), MOVEFILE_REPLACE_EXISTING)) saved_version = version;
             else livemap::log("finds: could not write livemap\\finds.json (error %lu), will retry", GetLastError());
+        }
+        // Discovered markers: read every 5 s, saved the same way when they changed.
+        if (config.discovered && now - last_discovered >= 5'000) {
+            last_discovered = now;
+            livemap::world::refresh_discovered(static_cast<int64_t>(std::time(nullptr)));
+            const uint64_t version = livemap::world::discovered_store().version();
+            if (version != discovered_saved) {
+                const std::string text = livemap::world::discovered_store().to_json();
+                const std::wstring tmp = discovered_path + L".tmp";
+                bool ok = false;
+                if (FILE* f = _wfopen(tmp.c_str(), L"wb")) {
+                    ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
+                    std::fclose(f);
+                }
+                if (ok && MoveFileExW(tmp.c_str(), discovered_path.c_str(), MOVEFILE_REPLACE_EXISTING)) discovered_saved = version;
+            }
         }
         if (config.log_diagnostics && now - last_diag >= 30'000) {
             last_diag = now;

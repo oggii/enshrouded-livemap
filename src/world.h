@@ -6,6 +6,7 @@
 #include <string>
 
 #include "bases.h"
+#include "discovered.h"
 #include "finds.h"
 #include "scan.h"
 
@@ -20,6 +21,11 @@ void refresh_players();
 
 // The current state as JSON for the web page.
 std::string snapshot_json();
+
+// Which markers each player has discovered (their set knowledge keys); main.cpp refreshes and
+// saves it, web.cpp serves it.
+discovered::Store& discovered_store();
+void refresh_discovered(int64_t unix_now);
 
 // The world's Flame level as the server reports it to Steam (-1 = not known yet); main.cpp sets it.
 void set_flame_level(int level);

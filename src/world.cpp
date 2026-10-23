@@ -61,6 +61,18 @@ SafetyHookMid g_chest_hook;
 SafetyHookMid g_bases_hook;
 finds::Store g_finds;
 bases::Store g_bases;
+discovered::Store g_discovered;
+bool g_discovered_off = false;  // layout not recognised once: stop looking
+
+// Per-player dynamic knowledge (docs/RESEARCH.md section 17, build 26083076): the player
+// manager holds the knowledge records object at +0x1c8; record = object + (handle & 0x3f) * 0x5620;
+// in it the knowledge map {keys ptr, count, capacity 11000, ...} at +0x5b78 and the parallel
+// values {ptr, count, capacity, ...} at +0x5ba0. Read only.
+constexpr uintptr_t kKnowledgeRecords = 0x1c8;
+constexpr uintptr_t kRecordStride = 0x5620;
+constexpr uintptr_t kRecordKeys = 0x5b78;
+constexpr uintptr_t kRecordValues = 0x5ba0;
+constexpr uint64_t kKnowledgeCapacity = 11000;
 std::atomic<int> g_bases_logged{0};
 
 double meters(int64_t fixed);
@@ -495,6 +507,56 @@ void append_weather(std::string& out) {
 
 finds::Store& store() { return g_finds; }
 bases::Store& bases_store() { return g_bases; }
+discovered::Store& discovered_store() { return g_discovered; }
+
+void refresh_discovered(int64_t unix_now) {
+    uintptr_t manager = g_manager.load(std::memory_order_relaxed);
+    if (manager == 0 || g_discovered_off) return;
+    uintptr_t records = 0;
+    if (!read_ptr(manager + kKnowledgeRecords, records) || records < 0x10000) return;
+    std::vector<std::string> online;
+    for (int i = 0; i < kSlotCount; ++i) {
+        uintptr_t slot = manager + kSlots + static_cast<uintptr_t>(i) * kStride;
+        uint32_t handle = 0, entity = 0;
+        uint8_t state = 0;
+        if (!read_u32(slot, handle) || handle == 0 || !read_u8(slot + kState, state) || state != kInGame ||
+            !read_u32(slot + kEntity, entity) || entity == 0) {
+            continue;
+        }
+        std::string name;
+        {
+            std::lock_guard lock(g_names_mutex);
+            name = g_names[i];
+        }
+        if (name.empty()) continue;
+        online.push_back(name);
+        const uintptr_t record = records + static_cast<uintptr_t>(handle & 0x3f) * kRecordStride;
+        uintptr_t keys = 0, values = 0;
+        uint64_t count = 0, capacity = 0, value_count = 0;
+        if (!read_ptr(record + kRecordKeys, keys) || !read_u64(record + kRecordKeys + 8, count) ||
+            !read_u64(record + kRecordKeys + 16, capacity) || !read_ptr(record + kRecordValues, values) ||
+            !read_u64(record + kRecordValues + 8, value_count)) {
+            continue;
+        }
+        if (capacity != kKnowledgeCapacity || count > capacity || value_count != count) {
+            log("DISCOVERED layout not recognised (capacity %llu, count %llu / %llu); markers stay unknown",
+                static_cast<unsigned long long>(capacity), static_cast<unsigned long long>(count),
+                static_cast<unsigned long long>(value_count));
+            g_discovered_off = true;
+            return;
+        }
+        std::vector<uint32_t> k(count), v(count);
+        if (count && (!read_bytes(keys, k.data(), count * 4) || !read_bytes(values, v.data(), count * 4))) continue;
+        std::vector<uint32_t> set;
+        set.reserve(count);
+        for (size_t j = 0; j < k.size(); ++j)
+            if (v[j] != 0) set.push_back(k[j]);
+        if (g_discovered.update(name, std::move(set), unix_now)) {
+            log("DISCOVERED %s: %llu knowledge keys", name.c_str(), static_cast<unsigned long long>(count));
+        }
+    }
+    g_discovered.set_online(online);
+}
 
 void install_bases(const Targets& t) {
     if (t.bases == 0) {
@@ -658,7 +720,8 @@ std::string snapshot_json() {
     out += ",\"findsVersion\":" + std::to_string(g_finds.version());
     out += ",\"basesVersion\":" + std::to_string(g_bases.version(GetTickCount64()));
     const int flame = g_flame_level.load(std::memory_order_relaxed);
-    out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null")) + "}";
+    out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null"));
+    out += ",\"discoveredVersion\":" + std::to_string(g_discovered.version()) + "}";
     return out;
 }
 

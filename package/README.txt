@@ -42,6 +42,7 @@ AnnounceInChat=1       the map link in the chat when a player joins
 Key=<random>           3 to 64 letters, digits, - or _; players can type <address>/<key>
 Finds=1                ore veins and looted chests on the map
 Bases=1                the players' Flame Altars on the map
+Discovered=1           which places each player discovered (filter in the marker panel)
 
 Everyone with the link sees all player positions and Flame Altars. Change Key= to lock old
 links out.
