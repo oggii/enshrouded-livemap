@@ -400,3 +400,14 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
     reads them every 5 s for each player in game (src/world.cpp refresh_discovered), checks the
     capacity is 11000 (else logs DISCOVERED layout not recognised and stops), and serves the set
     keys at /discovered; tools/extract_pois.py writes discoveryKeys (point index -> key).
+
+## 18. Fog of war (23 Oct 2026)
+
+- The explored map area (the game map's fog) is NOT on the dedicated server. It is a chunk of the
+  character save on the player's PC: character*.ksd (SV2C) chunk type 272, zstd, unpacked data
+  starting with the magic "FGOW" version 2 (72 KB / 241 KB on this PC's two characters). The
+  client has a FogOfWar service ("[fog_of_war] patching savegame ..."); the server only knows the
+  save section name. A read-only dump diff on the live server before and after a 420 m flight
+  into fog found no grid that gained the flown path.
+- The reveal radius is game data: player templates carry `ecs::FogOfWarDiscovery`
+  {discoveryRange 300 m} (1_Player, 1_Player_AG2, AutomatedPlayer).
