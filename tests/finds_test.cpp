@@ -91,6 +91,7 @@ static void ore_like_filter() {
     EXPECT(livemap::finds::is_ore_like("Material_T4_Sulfur"));
     EXPECT(livemap::finds::is_ore_like("Material_T1_Salt"));
     EXPECT(livemap::finds::is_ore_like("Material_T1_Stone_Flint"));  // flint veins (found in game 22 Oct)
+    EXPECT(livemap::finds::is_ore_like("Material_T2_Clay"));        // clay pits (dug in game 23 Oct)
     EXPECT(!livemap::finds::is_ore_like("Material_T1_Stone"));
     EXPECT(!livemap::finds::is_ore_like("Material_T2_Copper_Bar"));
     EXPECT(!livemap::finds::is_ore_like("Prop_Deco_CopperJug"));

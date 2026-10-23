@@ -75,15 +75,15 @@ struct Reader {
 
 bool is_ore_like(const std::string& n) {
     // Deposits among the items terrain digging can drop (TerraformingEfficiencyRegistryResource,
-    // build 26083076): ores, gems and minerals. Debris such as twigs, bricks, straw or metal
+    // build 26083076): ores, gems, minerals and clay. Debris such as twigs, bricks, straw or metal
     // sheets from ruins is left out, and so is plain stone, dirt and wood.
     static const char* kDeposits[] = {
         "Material_T1_Salt",        "Material_T1_Stone_Flint", "Material_T1_KryptCrystal", "Material_T1_Red_Marble_Fragment",
-        "Material_T1_Tar",         "Material_T2_Amber",       "Material_T2_Ore_Copper",   "Material_T3_Ore_Tin",
-        "Material_T4_Lapislazuli", "Material_T4_Ore_Iron",    "Material_T4_Sulfur",       "Material_T5_Amethyst",
-        "Material_T5_Coal",        "Material_T5_Obsidian",    "Material_T5_Silver_Ore",   "Material_T6_Aquamarine",
-        "Material_T6_Gold_Ore",    "Material_T6_MotherOfPearl", "Material_T7_Celesthium_Ore", "Material_T7_Diamond",
-        "Material_T7_Moonstone",
+        "Material_T1_Tar",         "Material_T2_Amber",       "Material_T2_Clay",         "Material_T2_Ore_Copper",
+        "Material_T3_Ore_Tin",     "Material_T4_Lapislazuli", "Material_T4_Ore_Iron",     "Material_T4_Sulfur",
+        "Material_T5_Amethyst",    "Material_T5_Coal",        "Material_T5_Obsidian",     "Material_T5_Silver_Ore",
+        "Material_T6_Aquamarine",  "Material_T6_Gold_Ore",    "Material_T6_MotherOfPearl", "Material_T7_Celesthium_Ore",
+        "Material_T7_Diamond",     "Material_T7_Moonstone",
     };
     for (const char* d : kDeposits) {
         if (n == d) return true;
