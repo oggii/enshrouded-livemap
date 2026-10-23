@@ -1,4 +1,4 @@
-1.4.0 (not released yet)
+1.4.0
 - Deadly shroud: shroud zones above your world's Flame level are drawn pink, as on the game's
   own map, with their own switch under Overlays. Hover a shroud zone for its level. The level of
   every zone comes from the game's map data, the Flame level from the server itself (the number

@@ -1,4 +1,4 @@
-Enshrouded Live Map 1.3.2
+Enshrouded Live Map 1.4.0
 =========================
 
 Server-side mod for Enshrouded dedicated servers. The server serves a live web map: players
