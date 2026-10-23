@@ -390,5 +390,8 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
     key array exists (replication). The record's area is referenced from ServerPlayers-0x18
     (0x7344583fd090 -> 0x7345271cd770); no pointer path of depth 3 from the G38Knowledge,
     KnowledgeReplicationServer or ServerPlayers services reached the record yet.
+  - Confirmed by a real discovery: the player reached Riverreach (wetlands town 02, visible id
+    7d496e64); the key was in neither earlier dump and appeared in the next one at index 1076 with
+    value 1 (map 1245 -> 1249 entries), in both copies.
   - Open: a stable way for the DLL to find each player's map (static RE of the code that fills
     it, e.g. the users of the 11000 capacity), and which slot a record belongs to.
