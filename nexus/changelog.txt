@@ -1,4 +1,4 @@
-1.5.0 (not released yet)
+1.5.0
 - Discovered places: the marker panel can show all places, only the ones discovered, or only the
   ones not discovered yet, by anyone or by one player. It is the game's own state: the server
   keeps which places each player has discovered, and the map reads it (297 map places carry
