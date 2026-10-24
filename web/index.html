@@ -82,6 +82,20 @@
   #pois .group { margin-top: 6px; padding-top: 12px; font: 700 12px var(--caps); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
     background: var(--ui-hairline) left top / 100% 2px no-repeat; }
   #poiList > .group:first-child { margin-top: 0; padding-top: 2px; background: none; }
+  #search { width: 296px; padding-top: 0; padding-bottom: 0; }
+  #searchBox { width: 100%; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); color: var(--text);
+    font: 500 15px var(--serif); padding: 5px 8px; outline: none; }
+  #searchBox:focus { border-color: var(--gold-dim); }
+  #searchBox::placeholder { color: var(--muted); }
+  #searchResults { list-style: none; margin: 0; padding: 0; }
+  #searchResults:not(:empty) { margin-top: 6px; }
+  #searchResults li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 6px; cursor: pointer; font-size: 15px; }
+  #searchResults li .k { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #searchResults li[aria-selected="true"], #searchResults li:hover { background: rgba(220, 183, 107, 0.14); color: var(--gold-bright); }
+  .search-ping { border: 2px solid var(--gold-bright); border-radius: 50%; box-shadow: 0 0 14px rgba(246, 220, 160, 0.8);
+    animation: ping 1.4s ease-out 3; }
+  @keyframes ping { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .search-ping { animation: none; } }
   #poiList::after { content: ""; display: block; position: sticky; bottom: -2px; height: 26px; margin-top: -8px; pointer-events: none;
     background: linear-gradient(rgba(18, 14, 25, 0), rgba(18, 14, 25, 0.96)); }
   #poiToggle { background: var(--panel); color: var(--gold); text-shadow: 0 0 10px rgba(220, 183, 107, 0.35);
@@ -159,6 +173,7 @@
     #clock .big { font-size: 26px; margin: 0; }
     #left { top: 8px; left: 50px; right: 106px; max-height: none; }
     #players { min-width: 0; max-width: none; width: 100%; }
+    #search { width: 100%; }
     #players li { font-size: 15px; flex-wrap: wrap; column-gap: 8px; row-gap: 0; }
     #players li .coords { font-size: 13px; flex-basis: 100%; padding-left: 18px; }
     #left #pois { position: fixed; left: 0; right: 0; bottom: 38px; width: auto; max-height: 46vh; z-index: 1001; }
@@ -171,6 +186,8 @@
 <div id="map"></div>
 <div id="left">
   <div id="players" class="card"><h2>Players online</h2><ul id="playerList"><li class="placeholder">Connecting…</li></ul></div>
+  <div id="search" class="card"><input id="searchBox" type="search" placeholder="Find a place or player" autocomplete="off"
+    aria-label="Find a place, region or player" aria-controls="searchResults"><ul id="searchResults" role="listbox"></ul></div>
   <button id="poiToggle" type="button" aria-expanded="false" aria-controls="pois">Markers</button>
   <div id="pois" class="card hidden"><h2>Markers <span class="actions"><button id="poiAll" type="button">all / none</button><button id="poiClose" type="button" aria-label="Close the marker panel">✕</button></span></h2><div id="poiList"></div></div>
 </div>
@@ -236,6 +253,7 @@
   let showShroud = (() => { try { return localStorage.getItem("livemap.shroud") !== "0"; } catch { return true; } })();
   let showFog = (() => { try { return localStorage.getItem("livemap.fog") === "1"; } catch { return false; } })();
   let showRegions = (() => { try { return localStorage.getItem("livemap.regions") !== "0"; } catch { return true; } })();
+  let showPlaces = (() => { try { return localStorage.getItem("livemap.places") !== "0"; } catch { return true; } })();
   const layers = {};
 
   function toLatLng(pos) { return L.latLng(pos[2], pos[0]); }
@@ -654,7 +672,38 @@
         }
       }
       this._regionsDrawn = 0;
-      if (showRegions && rawPoiData && rawPoiData.regions) this._drawRegions(ctx, ox, oy, sx, sy, X0, Y0, W, H);
+      this._placeBoxes = [];
+      const taken = showRegions && rawPoiData && rawPoiData.regions ? this._drawRegions(ctx, ox, oy, sx, sy, X0, Y0, W, H) : [];
+      if (showPlaces && PLACES.length) this._drawPlaces(ctx, ox, oy, sx, sy, X0, Y0, W, H, taken);
+    },
+    // The game's place names (pois.json "places": its Location labels, the names the game writes on
+    // its own map) in small capitals under their spot, fading in from zoom -2.6. A name that would
+    // touch a region name or one already drawn is left out; names used once come first. The
+    // Discovered filter hides them like the markers (by the explored area).
+    _drawPlaces(ctx, ox, oy, sx, sy, X0, Y0, W, H, taken) {
+      const z = this._map.getZoom(), alpha = Math.max(0, Math.min(1, (z + 2.6) / 0.7));
+      if (alpha <= 0) return;
+      const size = Math.round(Math.max(10, Math.min(15, 13 + z * 1.5)));
+      const filter = discMode !== "all" && EXP && discNames().length;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.95;
+      ctx.font = "600 " + size + "px Alegreya, Georgia, serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      if ("letterSpacing" in ctx) ctx.letterSpacing = (size * 0.12).toFixed(1) + "px";
+      ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(10, 8, 14, 0.85)";
+      ctx.fillStyle = "#f1e4c4";
+      const boxes = this._placeBoxes, hit = b => taken.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])
+        || boxes.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+      for (const [name, wx, wz, upper] of PLACES) {
+        const x = ox + wx * sx, y = oy + wz * sy + 11;
+        if (x < X0 || x > W || y < Y0 || y > H) continue;
+        if (filter) { const known = exploredAt(wx, wz); if (discMode === "known" ? !known : known) continue; }
+        const half = ctx.measureText(upper).width / 2 + 3, box = [x - half, y - 1, x + half, y + size + 1];
+        if (hit(box)) continue;
+        ctx.strokeText(upper, x, y); ctx.fillText(upper, x, y);
+        boxes.push(box);
+      }
+      ctx.restore();
     },
     // The game's region names (pois.json "regions": its MapLabel_general_Tower_* labels at each
     // region's Ancient Spire) in spaced capitals, as on the game's map: large when zoomed out,
@@ -662,7 +711,7 @@
     _drawRegions(ctx, ox, oy, sx, sy, X0, Y0, W, H) {
       const z = this._map.getZoom(), alpha = Math.max(0, Math.min(1, (-0.5 - z) / 1.25));
       this._regionsDrawn = 0;
-      if (alpha <= 0) return;
+      if (alpha <= 0) return [];
       const size = Math.round(Math.max(15, Math.min(30, 30 + (z + 2) * 8)));
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -684,6 +733,7 @@
         this._regionsDrawn++;
       }
       ctx.restore();
+      return placed;
     },
     _hover(e) {
       const h = this._hits;
@@ -884,13 +934,18 @@
     const rb = rg.querySelector("input");
     rb.checked = showRegions;
     rb.onchange = () => { showRegions = rb.checked; try { localStorage.setItem("livemap.regions", showRegions ? "1" : "0"); } catch {} poiLayer.schedule(); };
-    list.prepend(wxHead, wx, sh, fg, rg);
+    const pl = document.createElement("label");
+    pl.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#cdbb92"></span><span class="t">Place names</span>';
+    const pb = pl.querySelector("input");
+    pb.checked = showPlaces;
+    pb.onchange = () => { showPlaces = pb.checked; try { localStorage.setItem("livemap.places", showPlaces ? "1" : "0"); } catch {} poiLayer.schedule(); };
+    list.prepend(wxHead, wx, sh, fg, rg, pl);
     shroudLabel();
     const dHead = document.createElement("div"); dHead.className = "group"; dHead.textContent = "Discovered";
     const dRow = document.createElement("div"); dRow.className = "disc";
     dRow.innerHTML = '<select id="discMode"><option value="all">All places</option><option value="known">Discovered</option>'
       + '<option value="unknown">Not discovered</option></select><select id="discBy"></select><span class="disc-note" id="discNote"></span>';
-    rg.after(dHead, dRow);
+    pl.after(dHead, dRow);
     const modeSel = dRow.querySelector("#discMode"), bySel = dRow.querySelector("#discBy");
     modeSel.value = discMode;
     modeSel.onchange = () => { discMode = modeSel.value; try { localStorage.setItem("livemap.discMode", discMode); } catch {} poiLayer.invalidate(); };
@@ -904,6 +959,7 @@
   }
 
   let rawPoiData = null;
+  let PLACES = [];   // [name, x, z, NAME, how often the name is used], names used once first
   function rebuildPois() {
     const data = JSON.parse(JSON.stringify(rawPoiData));
     // Discovery keys belong to the pois.json order, so attach them before altars and finds append.
@@ -925,6 +981,10 @@
     if (!data) return;
     iconFiles = icons || {};
     rawPoiData = data;
+    const uses = new Map();
+    for (const [name] of data.places || []) uses.set(name, (uses.get(name) || 0) + 1);
+    PLACES = (data.places || []).map(([name, x, z]) => [name, x, z, name.toUpperCase(), uses.get(name)])
+      .sort((a, b) => a[4] - b[4]);
     findsData = finds;
     findsVersion = finds ? finds.version : -1;
     basesData = bases;
@@ -1487,6 +1547,68 @@
   setInterval(() => { if (!document.hidden) poiLayer.invalidate(); }, 60000);
   // Console and test access: livemap.weather.weights([x, y, z]) etc.
   // For tools/perf/chest_check.mjs: the looted chests and what the page makes of them.
+  // Search: places and regions from the game's labels, named markers and the players online.
+  // Names that start with the text come first, then the ones with a word starting with it, then
+  // the rest; Enter or a click flies there and rings the spot.
+  const searchBox = document.getElementById("searchBox"), searchList = document.getElementById("searchResults");
+  let searchHits = [], searchPick = 0, searchPing = null;
+  function searchEntries() {
+    const out = [], seen = new Set();
+    const add = (name, kind, x, z, zoom) => {
+      const key = name + "|" + Math.round(x / 80) + "|" + Math.round(z / 80);
+      if (!seen.has(key)) { seen.add(key); out.push({ name, kind, x, z, zoom }); }
+    };
+    for (const p of (lastState && lastState.players) || []) if (p.pos) add(p.name || "Player " + p.entity, "Player", p.pos[0], p.pos[2], 0);
+    for (const [name, x, z] of (rawPoiData && rawPoiData.regions) || []) add(name, "Region", x, z, -2);
+    for (const [name, x, z] of PLACES) add(name, "Place", x, z, 0);
+    if (poiData) for (const p of poiData.pois) {
+      if (!p[4] || p.isFind) continue;
+      const c = poiData.categories[p[0]];
+      add(String(p[4]).split(" · ").pop(), c ? c.label.replace(/s$/, "") : "Marker", p[1], p[3], 0.5);
+    }
+    return out;
+  }
+  function runSearch() {
+    const q = searchBox.value.trim().toLowerCase();
+    searchHits = [];
+    if (q.length >= 2) {
+      const rank = n => { const s = n.toLowerCase(); return s.startsWith(q) ? 0 : s.split(/[\s'"(-]+/).some(w => w.startsWith(q)) ? 1 : s.includes(q) ? 2 : 9; };
+      const order = { Player: 0, Region: 1, Place: 2 };
+      searchHits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9)
+        .sort((a, b) => a.r - b.r || (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || a.name.localeCompare(b.name)).slice(0, 8);
+    }
+    searchPick = 0;
+    const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    searchList.innerHTML = searchHits.map((h, i) => '<li role="option" data-i="' + i + '" aria-selected="' + (i === searchPick) + '"><span>'
+      + esc(h.name) + '</span><span class="k">' + esc(h.kind) + "</span></li>").join("");
+  }
+  function goTo(hit) {
+    map.setView([hit.z, hit.x], Math.max(map.getZoom(), hit.zoom), { animate: true });
+    if (searchPing) searchPing.remove();
+    searchPing = L.marker([hit.z, hit.x], { interactive: false, icon: L.divIcon({ className: "search-ping", iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
+    setTimeout(() => { if (searchPing) { searchPing.remove(); searchPing = null; } }, 4500);
+    searchBox.value = hit.name;
+    searchList.innerHTML = "";
+    searchHits = [];
+  }
+  searchBox.addEventListener("input", runSearch);
+  searchBox.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!searchHits.length) return;
+      e.preventDefault();
+      searchPick = (searchPick + (e.key === "ArrowDown" ? 1 : searchHits.length - 1)) % searchHits.length;
+      searchList.querySelectorAll("li").forEach((li, i) => li.setAttribute("aria-selected", String(i === searchPick)));
+    } else if (e.key === "Enter" && searchHits.length) {
+      e.preventDefault();
+      goTo(searchHits[searchPick]);
+    } else if (e.key === "Escape") {
+      searchBox.value = ""; searchList.innerHTML = ""; searchHits = [];
+    }
+  });
+  searchList.addEventListener("mousedown", e => { const li = e.target.closest("li"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
+  window.livemap.search = { find: text => { searchBox.value = text; runSearch(); return searchHits.map(h => h.name + " · " + h.kind); },
+    go: () => searchHits.length && goTo(searchHits[searchPick]), placesDrawn: () => (poiLayer._placeBoxes || []).length, placeBoxes: () => poiLayer._placeBoxes || [] };
+
   // Movable panels (wide screens): drag the players, clock or marker panel by its title. It stays
   // inside the window, snaps to an edge closer than 24 px and is kept relative to the nearest
   // corner, so it stays put when the window changes size. The browser remembers each panel's place

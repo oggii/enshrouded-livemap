@@ -243,6 +243,45 @@ def load_regions(server_dir, texts, instances):
     return sorted([name, x, z] for name, (x, z) in regions.items())
 
 
+# Place names as the game writes them on its map: every Location entity with a LocaTag text (the
+# 8kMapLabel_* and MapMarker_* templates, 700 placed in build 26083076). Names used for camps,
+# ruins and towers repeat up to 7 times and stay; the ones used 10 times and more (Shroud Root,
+# Flame Shrine, Cave Passage, Gem Forge ...) name a kind of point, not a place, and are left out,
+# and so are the region labels (see load_regions).
+PLACE_NAME_MAX_REPEATS = 7
+
+
+def load_places(server_dir, texts, region_names):
+    tpls = {}
+    for path in glob.glob(os.path.join(server_dir, "TemplateResource", "*.json")):
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            continue
+        if '"keen::ecs::Location"' not in text:
+            continue
+        d = json.loads(text)
+        if REGION_LABEL.match(d.get("name") or ""):
+            continue
+        comps = {c.get("$type"): c.get("$value") or {} for c in d.get("components") or []}
+        tag = (comps.get("keen::ecs::LocaTagComponent") or {}).get("locaTag")
+        name = REGION_TEXT_PREFIX.sub("", texts.by_guid(tag) or "").strip() if tag else ""
+        if name:
+            tpls[d["$guid"]] = ("place", name, d["name"])
+    found = load_instances(server_dir, tpls)
+    repeats = collections.Counter(label for _, _, _, _, label, _ in found)
+    seen, places = set(), []
+    for _, x, _, z, label, _ in sorted(found, key=lambda r: (r[4], r[1], r[3])):
+        if repeats[label] > PLACE_NAME_MAX_REPEATS or label in region_names:
+            continue
+        key = (label, round(x / 50), round(z / 50))   # the same label placed twice on one spot
+        if key in seen:
+            continue
+        seen.add(key)
+        places.append([label, x, z])
+    return places
+
+
 def fixed(hi, lo):
     return hi + lo / 65536.0
 
@@ -326,6 +365,8 @@ def main():
     if names:
         data["regions"] = load_regions(a.server, names[0], instances)
         print(f"regions: {data['regions']}", file=sys.stderr)
+        data["places"] = load_places(a.server, names[0], {r[0] for r in data["regions"]})
+        print(f"{len(data['places'])} place names", file=sys.stderr)
     text = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(text)

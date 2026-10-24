@@ -1,3 +1,12 @@
+1.8.0 (not released yet)
+- Place names: the names the game writes on its own map (Pike's Port, Thornhold, Glennwood's
+  End ... 384 of them) as a layer of their own when you zoom in, without overlapping, following
+  the Discovered filter. Switch "Place names" under Overlays.
+- Search: find a place, region, named marker or player by name; Enter or a click flies there.
+- Every player online gets a colour of their own, up to the game's 16 players.
+- Player names: read exactly as the game stores them (the cause of "Player 3/4" in 1.0.0 is
+  covered by a test now); a name that comes after the player is logged as NAME.
+
 1.7.0
 - The page now wears the game's own map-screen look: the gold frame, separators and player arrow
   from the game files, Alegreya type, diamond switches, a compass rose and a metre scale. Player
