@@ -9,6 +9,9 @@ deadly shroud above your Flame level, fog of war and discovered places per playe
 deposits players mined and the chests they opened. Players install nothing; they open a link
 in the browser, on PC, tablet or phone. Also on [Nexus Mods](https://www.nexusmods.com/enshrouded/mods/209).
 
+Sister mod: **[Shared XP](https://github.com/oggii/enshrouded-shared-xp)** shares non-combat XP
+with everyone online, also server-side only ([Nexus](https://www.nexusmods.com/enshrouded/mods/178)).
+
 ![The whole world in the game's own look, with its region names](nexus/screens/01-overview.jpg)
 
 ## Install
@@ -144,7 +147,8 @@ relief by `tools/enhance_map.py`. Unzip it over the install; it adds `livemap/ti
 
 ## Works with Shared XP
 
-Shared XP 1.1.3 or newer. Both mods add a line to the chat after "Player X joined." and can run together; whichever starts
+[Shared XP](https://github.com/oggii/enshrouded-shared-xp) ([Nexus](https://www.nexusmods.com/enshrouded/mods/178))
+1.1.3 or newer. Both mods add a line to the chat after "Player X joined." and can run together; whichever starts
 second adds its hook on top of the first one.
 
 ## Screenshots
