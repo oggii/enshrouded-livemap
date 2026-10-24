@@ -3,8 +3,9 @@
 // Passes when, around Pike's Port at zoom -1, many place names are drawn and no two of them (or a
 // region name) overlap; none are drawn far out (zoom -3.5); the switch turns them off; the search
 // finds "Pike's Port" first for "pike", a region for "revel" and a player for "brom", and Enter
-// lands within 60 m of Pike's Port at zoom 0 or closer; a link with &mark rings two spots and opens
-// at the first; no page errors.
+// lands within 60 m of Pike's Port at zoom 0 or closer; following a player, results name their
+// region and the way from him and "gold" lists the nearest gold chests in order; a link with
+// &mark rings two spots and opens at the first; no page errors.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import http from "node:http";
@@ -73,6 +74,22 @@ await page.waitForTimeout(1200);
 const at = await page.evaluate(() => { const c = window.livemap.map.getCenter(); return { x: c.lng, z: c.lat, zoom: window.livemap.map.getZoom() }; });
 const dist = Math.hypot(at.x - pike[1], at.z - pike[2]);
 check("Enter lands on Pike's Port", dist < 60 && at.zoom >= -0.01, `${dist.toFixed(0)} m off, zoom ${at.zoom}`);
+// Following Brom: every result says its region and how far and which way from him; "gold" lists
+// the gold chests nearest to him, nearest first.
+const brom = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+brom.on("pageerror", e => errors.push(e.message));
+await brom.goto("http://127.0.0.1:" + server.address().port + "/?key=x&follow=Brom");
+await brom.waitForFunction(() => window.livemap?.search && window.livemap.search.me() === "Brom" && window.livemap.poiLayer, null, { timeout: 20000 });
+await brom.waitForTimeout(1500);
+const pikeMeta = await brom.evaluate(() => { window.livemap.search.find("pike"); return window.livemap.search.meta(); });
+const regions = pois.regions.map(r => r[0]);
+check("results name their region and the way from you", regions.some(r => pikeMeta[0].startsWith(r)) && /\d(\.\d)? (m|km) (N|NE|E|SE|S|SW|W|NW)\b/.test(pikeMeta[0]), pikeMeta[0]);
+const gold = await brom.evaluate(() => ({ names: window.livemap.search.find("gold"), meta: window.livemap.search.meta(),
+  from: document.querySelector("#searchResults li.from")?.textContent }));
+const km = gold.meta.filter((m, i) => gold.names[i] === "Gold chest · Gold chest").map(m => { const x = m.match(/([\d.]+) (m|km)/); return x ? +x[1] * (x[2] === "km" ? 1000 : 1) : NaN; });
+check("'gold' lists the gold chests nearest to you, nearest first", km.length >= 3 && km.every((d, i) => i === 0 || d >= km[i - 1]) && gold.from === "Distances from Brom",
+  km.join(", ") + " m; " + gold.from);
+await brom.close();
 const marked = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 marked.on("pageerror", e => errors.push(e.message));
 await marked.goto("http://127.0.0.1:" + server.address().port + "/?key=x&mark=3596,1348,Pond;4328,5380,Deep%20lake");

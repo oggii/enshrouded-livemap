@@ -3,6 +3,9 @@
   End ... 384 of them) as a layer of their own when you zoom in, without overlapping, following
   the Discovered filter. Switch "Place names" under Overlays.
 - Search: find a place, region, named marker or player by name; Enter or a click flies there.
+  Each result says its region, how far and which way it is from you (the player you follow, or
+  the one picked under Discovered) and when you have not discovered it yet. A kind of point
+  (gold, spire, shrine, well ...) lists the nearest ones first.
 - Every player online gets a colour of their own, up to the game's 16 players.
 - Player names: read exactly as the game stores them (the cause of "Player 3/4" in 1.0.0 is
   covered by a test now); a name that comes after the player is logged as NAME.

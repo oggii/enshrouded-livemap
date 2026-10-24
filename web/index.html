@@ -92,8 +92,12 @@
   #searchBox::placeholder { color: var(--muted); }
   #searchResults { list-style: none; margin: 0; padding: 0; }
   #searchResults:not(:empty) { margin-top: 6px; }
-  #searchResults li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 6px; cursor: pointer; font-size: 15px; }
+  #searchResults li { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 10px; padding: 4px 6px; cursor: pointer; font-size: 15px; }
   #searchResults li .k { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #searchResults li .m { flex-basis: 100%; color: var(--muted); font-size: 13px; line-height: 1.25; font-variant-numeric: lining-nums tabular-nums; }
+  #searchResults li .m .nd { color: #e3a08c; }
+  #searchResults li.from { cursor: default; color: var(--muted); font-size: 12px; font-style: italic; padding-top: 6px; }
+  #searchResults li.from:hover { background: none; color: var(--muted); }
   #searchResults li[aria-selected="true"], #searchResults li:hover { background: rgba(220, 183, 107, 0.14); color: var(--gold-bright); }
   .search-ping { border: 2px solid var(--gold-bright); border-radius: 50%; box-shadow: 0 0 14px rgba(246, 220, 160, 0.8);
     animation: ping 1.4s ease-out 3; }
@@ -194,7 +198,7 @@
 <div id="map"></div>
 <div id="left">
   <div id="players" class="card"><h2>Players online</h2><ul id="playerList"><li class="placeholder">Connecting…</li></ul></div>
-  <div id="search" class="card"><input id="searchBox" type="search" placeholder="Find a place or player" autocomplete="off"
+  <div id="search" class="card"><input id="searchBox" type="search" placeholder="Find a place, player, gold chest…" autocomplete="off"
     aria-label="Find a place, region or player" aria-controls="searchResults"><ul id="searchResults" role="listbox"></ul></div>
   <button id="poiToggle" type="button" aria-expanded="false" aria-controls="pois">Markers</button>
   <div id="pois" class="card hidden"><h2>Markers <span class="actions"><button id="poiAll" type="button">all / none</button><button id="poiClose" type="button" aria-label="Close the marker panel">✕</button></span></h2><div id="poiList"></div></div>
@@ -1582,9 +1586,9 @@
   let searchHits = [], searchPick = 0, searchPing = null;
   function searchEntries() {
     const out = [], seen = new Set();
-    const add = (name, kind, x, z, zoom) => {
+    const add = (name, kind, x, z, zoom, p) => {
       const key = name + "|" + Math.round(x / 80) + "|" + Math.round(z / 80);
-      if (!seen.has(key)) { seen.add(key); out.push({ name, kind, x, z, zoom }); }
+      if (!seen.has(key)) { seen.add(key); out.push({ name, kind, x, z, zoom, p }); }
     };
     for (const p of (lastState && lastState.players) || []) if (p.pos) add(p.name || "Player " + p.entity, "Player", p.pos[0], p.pos[2], 0);
     for (const [name, x, z] of (rawPoiData && rawPoiData.regions) || []) add(name, "Region", x, z, -2);
@@ -1592,23 +1596,85 @@
     if (poiData) for (const p of poiData.pois) {
       if (!p[4] || p.isFind) continue;
       const c = poiData.categories[p[0]];
-      add(String(p[4]).split(" · ").pop(), c ? c.label.replace(/s$/, "") : "Marker", p[1], p[3], 0.5);
+      add(String(p[4]).split(" · ").pop(), c ? kindOf(c) : "Marker", p[1], p[3], 0.5, p);
     }
     return out;
   }
+  // A category's label for one point: "Flame Shrines & Temples" -> "Flame Shrine & Temple".
+  const kindOf = cat => cat.label.replace(/([^s\W])s\b/g, "$1");
+  // The kind is left out when the name already says it ("Gold chest", "Flame Shrine").
+  const kindShown = h => {
+    const words = h.kind.toLowerCase().split(/[\s&]+/).filter(Boolean);
+    return h.name.toLowerCase().split(/\s+/).every(w => words.includes(w)) ? "" : h.kind;
+  };
+  // Who "you" are for distances: the followed player, else the one picked under Discovered while
+  // online, else the only player online.
+  function searchMe() {
+    const ps = ((lastState && lastState.players) || []).filter(p => p.pos);
+    const nameOf = p => p.name || "Player " + p.entity;
+    return (follow !== null && ps.find(p => p.entity === follow)) || (discBy && ps.find(p => nameOf(p) === discBy))
+      || (ps.length === 1 ? ps[0] : null);
+  }
+  // The game draws no region borders; a point belongs to the region whose name (at its Ancient
+  // Spire) is nearest, which is right except close to a border.
+  function regionAt(x, z) {
+    let best = null, bd = Infinity;
+    for (const [name, rx, rz] of (rawPoiData && rawPoiData.regions) || []) {
+      const d = (rx - x) ** 2 + (rz - z) ** 2;
+      if (d < bd) { bd = d; best = name; }
+    }
+    return best;
+  }
+  const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  function awayText(from, x, z) {
+    const dx = x - from[0], dz = z - from[1], d = Math.hypot(dx, dz);
+    if (d < 25) return "here";
+    const dir = COMPASS[Math.round(((Math.atan2(dx, dz) * 180 / Math.PI) + 360) % 360 / 45) % 8];
+    return (d < 1000 ? Math.round(d / 10) * 10 + " m " : (d / 1000).toFixed(1) + " km ") + dir;
+  }
+  // Discovered by the player(s) chosen under Discovered: the game's own state for places with a
+  // key, else the explored area. null = not known (no data, or a kind that is never filtered).
+  function searchKnown(h) {
+    if (h.kind === "Player" || h.kind === "Region" || !discNames().length) return null;
+    if (h.p) return discKnown(h.p);
+    return EXP ? exploredAt(h.x, h.z) : null;
+  }
+  // Names that start with the text first, then a word starting with it, then the rest; a kind of
+  // point ("gold", "spire", "shrine") adds its five nearest points. Within a rank: players,
+  // regions, places, markers, then the nearest first. Each result says its region, how far and
+  // which way from you, and when the chosen player has not discovered it yet.
   function runSearch() {
     const q = searchBox.value.trim().toLowerCase();
+    const me = searchMe(), c = map.getCenter();
+    const from = me ? [me.pos[0], me.pos[2]] : [c.lng, c.lat];
     searchHits = [];
     if (q.length >= 2) {
       const rank = n => { const s = n.toLowerCase(); return s.startsWith(q) ? 0 : s.split(/[\s'"(-]+/).some(w => w.startsWith(q)) ? 1 : s.includes(q) ? 2 : 9; };
       const order = { Player: 0, Region: 1, Place: 2 };
-      searchHits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9)
-        .sort((a, b) => a.r - b.r || (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || a.name.localeCompare(b.name)).slice(0, 8);
+      const far = e => (e.x - from[0]) ** 2 + (e.z - from[1]) ** 2;
+      const hits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9);
+      if (poiData && q.length >= 3) poiData.categories.forEach((cat, ci) => {
+        if (!cat.label.toLowerCase().split(/[\s&]+/).some(w => w.startsWith(q))) return;
+        const kind = kindOf(cat);
+        poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, r: 1.5 }))
+          .sort((a, b) => far(a) - far(b)).slice(0, 5)
+          .forEach(e => { if (!hits.some(h => h.name === e.name && Math.abs(h.x - e.x) < 80 && Math.abs(h.z - e.z) < 80)) hits.push(e); });
+      });
+      searchHits = hits.sort((a, b) => a.r - b.r || (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || far(a) - far(b) || a.name.localeCompare(b.name)).slice(0, 8);
     }
     searchPick = 0;
-    const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    for (const h of searchHits) {
+      const known = searchKnown(h), parts = [];
+      if (h.kind !== "Region" && h.kind !== "Player") { const r = regionAt(h.x, h.z); if (r) parts.push(esc(r)); }
+      if (me && !(h.kind === "Player" && h.x === me.pos[0] && h.z === me.pos[2])) parts.push(esc(awayText(from, h.x, h.z)));
+      if (known === false) parts.push('<span class="nd">not discovered</span>');
+      h.meta = parts.join(" · ");
+    }
+    const meName = me ? me.name || "Player " + me.entity : "";
     searchList.innerHTML = searchHits.map((h, i) => '<li role="option" data-i="' + i + '" aria-selected="' + (i === searchPick) + '"><span>'
-      + esc(h.name) + '</span><span class="k">' + esc(h.kind) + "</span></li>").join("");
+      + esc(h.name) + '</span><span class="k">' + esc(kindShown(h)) + "</span>" + (h.meta ? '<span class="m">' + h.meta + "</span>" : "") + "</li>").join("")
+      + (me && searchHits.length ? '<li class="from" aria-hidden="true">Distances from ' + esc(meName) + "</li>" : "");
   }
   function goTo(hit) {
     map.setView([hit.z, hit.x], Math.max(map.getZoom(), hit.zoom), { animate: true });
@@ -1625,7 +1691,7 @@
       if (!searchHits.length) return;
       e.preventDefault();
       searchPick = (searchPick + (e.key === "ArrowDown" ? 1 : searchHits.length - 1)) % searchHits.length;
-      searchList.querySelectorAll("li").forEach((li, i) => li.setAttribute("aria-selected", String(i === searchPick)));
+      searchList.querySelectorAll("li[data-i]").forEach((li, i) => li.setAttribute("aria-selected", String(i === searchPick)));
     } else if (e.key === "Enter" && searchHits.length) {
       e.preventDefault();
       goTo(searchHits[searchPick]);
@@ -1633,7 +1699,7 @@
       searchBox.value = ""; searchList.innerHTML = ""; searchHits = [];
     }
   });
-  searchList.addEventListener("mousedown", e => { const li = e.target.closest("li"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
+  searchList.addEventListener("mousedown", e => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
   window.livemap.deaths = { of: deathsOf, data: () => deathsData };
 
   // A link with &mark=x,z,Name (several joined by ";") puts a pulsing ring with that name on each
@@ -1651,6 +1717,7 @@
   }
   window.livemap.marks = () => MARKS;
   window.livemap.search = { find: text => { searchBox.value = text; runSearch(); return searchHits.map(h => h.name + " · " + h.kind); },
+    meta: () => searchHits.map(h => h.meta.replace(/<[^>]+>/g, "")), me: () => { const m = searchMe(); return m ? m.name : null; },
     go: () => searchHits.length && goTo(searchHits[searchPick]), placesDrawn: () => (poiLayer._placeBoxes || []).length, placeBoxes: () => poiLayer._placeBoxes || [] };
 
   // Movable panels (wide screens): drag the players, clock or marker panel by its title. It stays
