@@ -16,6 +16,7 @@
 #include "ecs.h"
 #include "log.h"
 #include "memory.h"
+#include "names.h"
 #include "text.h"
 
 #include "items_generated.h"
@@ -44,6 +45,7 @@ std::array<Slot, kSlotCount> g_slots;
 std::mutex g_names_mutex;
 std::array<std::string, kSlotCount> g_names;
 std::array<uint32_t, kSlotCount> g_logged_entity{};
+std::array<std::string, kSlotCount> g_logged_name;   // refresh_players only
 
 std::atomic<uintptr_t> g_manager{0};
 std::atomic<uintptr_t> g_daytime{0};
@@ -385,23 +387,6 @@ void on_registry(SafetyHookContext& ctx) {
     if (std::strcmp(name, "WeatherSystem") == 0) g_weather_system.store(ctx.r8, std::memory_order_relaxed);
 }
 
-// The name field is {char* data, u64 length, u64 capacity}, UTF-8 (raw slot dumps 2026-10-22:
-// "OG Vanilla K" = length 12 / capacity 16, a 19-byte name = 19 / 32). Until 1.0.1 the field
-// was first read as inline text, which turned a pointer without a zero byte early on into a
-// garbled name.
-std::string read_name(uintptr_t field) {
-    uintptr_t ptr = 0;
-    uint64_t length = 0;
-    if (!read_ptr(field, ptr) || !read_u64(field + 8, length) || ptr < 0x10000 || length == 0 || length > 128) return {};
-    std::string s(static_cast<size_t>(length), '\0');
-    for (size_t i = 0; i < s.size(); ++i) {
-        uint8_t c = 0;
-        if (!read_u8(ptr + i, c)) return {};
-        s[i] = static_cast<char>(c);
-    }
-    return text::clean_utf8(s);
-}
-
 void log_raw_slot(int index, uintptr_t slot) {
     char hex[3 * 0x40 + 1] = {};
     for (int i = 0; i < 0x40; ++i) {
@@ -655,15 +640,20 @@ void refresh_players() {
         if (previous != entity) {
             g_slots[i].seen_ms.store(0, std::memory_order_relaxed);
         }
-        std::string name = entity != 0 ? read_name(slot + kName) : std::string();
+        std::string name = entity != 0 ? names::read(slot + kName) : std::string();
         {
             std::lock_guard lock(g_names_mutex);
             g_names[i] = name;
         }
         if (entity != 0 && g_logged_entity[i] != entity) {
             g_logged_entity[i] = entity;
+            g_logged_name[i] = name;
             log("PLAYER slot %d entity %u name \"%s\"", i, entity, name.c_str());
             log_raw_slot(i, slot);
+        } else if (entity != 0 && name != g_logged_name[i]) {
+            // A name that came after the player (or changed): the map shows it from now on.
+            g_logged_name[i] = name;
+            log("NAME   slot %d entity %u name \"%s\"", i, entity, name.c_str());
         } else if (entity == 0 && g_logged_entity[i] != 0) {
             log("LEFT   slot %d entity %u", i, g_logged_entity[i]);
             g_logged_entity[i] = 0;

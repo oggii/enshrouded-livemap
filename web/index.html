@@ -212,7 +212,19 @@
     document.fonts.add(f);
     return f.load();
   })() : Promise.reject();
-  const colors = ["#f2b766", "#6fd3c7", "#ff8fb1", "#9fd36f", "#b49bff", "#ffd36f", "#6fb4ff", "#ff9f6f"];
+  // One colour per player online, up to the game's 16 (the first free one when someone joins).
+  const colors = ["#f2b766", "#6fd3c7", "#ff8fb1", "#9fd36f", "#b49bff", "#ffd36f", "#6fb4ff", "#ff9f6f",
+    "#e8e4d8", "#d97a9e", "#4fb38a", "#c9a0ff", "#a8d8ff", "#d8c06a", "#ff7a6a", "#8fa8ff"];
+  const colorOf = new Map();   // entity -> colour index
+  function playerColor(entity) {
+    if (!colorOf.has(entity)) {
+      const used = new Set(colorOf.values());
+      let i = 0;
+      while (used.has(i) && i < colors.length - 1) i++;
+      colorOf.set(entity, i);
+    }
+    return colors[colorOf.get(entity)];
+  }
   // The map works in world metres: latlng = [z, x]. The world is worldSize x worldSize metres
   // (10240 in Enshrouded); north (+z) is up. Each map image covers `bounds` of the world.
   const map = L.map("map", { crs: L.CRS.Simple, minZoom: -5, maxZoom: 3, zoomSnap: 0.25, attributionControl: true });
@@ -1635,7 +1647,7 @@
     const seen = new Set();
     for (const p of state.players) {
       seen.add(p.entity);
-      const color = colors[p.entity % colors.length];
+      const color = playerColor(p.entity);
       const name = p.name || ("Player " + p.entity);
       const w = p.pos ? weatherLabel(state.weather, p.pos) : null;
       const coords = p.pos ? p.pos[0].toFixed(0) + ", " + p.pos[2].toFixed(0) + (w ? " · " + WEATHER_LABEL[w] : "") : "–";
@@ -1702,6 +1714,7 @@
     for (const [entity, row] of playerRows) if (!seen.has(entity)) { row.li.remove(); playerRows.delete(entity); }
     if (follow !== null && !seen.has(follow)) setFollow(null);
     for (const [entity, m] of markers) if (!seen.has(entity)) { m.remove(); markers.delete(entity); }
+    for (const entity of colorOf.keys()) if (!seen.has(entity)) colorOf.delete(entity);
     updateCalibPlayers();
   }
 
