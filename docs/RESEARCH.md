@@ -451,5 +451,9 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   48 8D 5A 18 48 8B F1 48 8B CB 4D 8B E8 4C 8B E2 E8`), one hit in both builds, checked by
   `B9 53 56 6D 66 E8` (mov ecx, low half of the type hash; call) at +0x1A3.
 - The map finds the player by the account hash at player slot + 0x48, else by the nearest
-  player within 30 m of the death position, and logs both as DEATH lines. Which one matches in
-  practice (and whether userId relates to the slot handle) is settled by the first real deaths.
+  player within 30 m of the death position, and logs both as DEATH lines.
+- In-game test on build 26083076 (24 Oct 2026, one player, test server): one event per death,
+  each matched by account (event accountIdHash == slot + 0x48). Shroud: cause 2, wasDeadlyFog 1;
+  killed by an enemy: cause 0 with a causeGuid; fall: cause 1; drowned in a pond: cause 3,
+  drowned 1. The position is where the player died (the drowning 23 m from the pond's middle).
+  userId is 0 on the dedicated server.
