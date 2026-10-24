@@ -98,7 +98,12 @@
   .search-ping { border: 2px solid var(--gold-bright); border-radius: 50%; box-shadow: 0 0 14px rgba(246, 220, 160, 0.8);
     animation: ping 1.4s ease-out 3; }
   @keyframes ping { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .search-ping { animation: none; } }
+  .mark-pin { background: none; border: 0; }
+  .mark-pin .ring { position: absolute; inset: 0; border: 2px solid var(--gold-bright); border-radius: 50%;
+    box-shadow: 0 0 14px rgba(246, 220, 160, 0.8); animation: ping 2s ease-out infinite; }
+  .mark-pin .dot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+    background: var(--gold-bright); border: 2px solid #1a1208; box-shadow: 0 0 8px rgba(0, 0, 0, 0.8); }
+  @media (prefers-reduced-motion: reduce) { .search-ping, .mark-pin .ring { animation: none; } }
   #poiList::after { content: ""; display: block; position: sticky; bottom: -2px; height: 26px; margin-top: -8px; pointer-events: none;
     background: linear-gradient(rgba(18, 14, 25, 0), rgba(18, 14, 25, 0.96)); }
   #poiToggle { background: var(--panel); color: var(--gold); text-shadow: 0 0 10px rgba(220, 183, 107, 0.35);
@@ -358,6 +363,7 @@
     const world = [[0, 0], [size, size]];
     map.fitBounds(world);
     map.setMaxBounds(L.latLngBounds(world).pad(0.2));
+    showMarks();
   });
 
   // Points of interest (web/pois.json, built by tools/extract_pois.py). All points are drawn on
@@ -1629,6 +1635,21 @@
   });
   searchList.addEventListener("mousedown", e => { const li = e.target.closest("li"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
   window.livemap.deaths = { of: deathsOf, data: () => deathsData };
+
+  // A link with &mark=x,z,Name (several joined by ";") puts a pulsing ring with that name on each
+  // spot and opens the map at the first one: to point someone at a place.
+  const MARKS = (new URLSearchParams(location.search).get("mark") || "").split(";")
+    .map(s => s.split(",")).map(([x, z, ...name]) => ({ x: +x, z: +z, name: name.join(",").trim() }))
+    .filter(m => Number.isFinite(m.x) && Number.isFinite(m.z) && (m.x || m.z));
+  function showMarks() {
+    for (const m of MARKS) {
+      const pin = L.marker([m.z, m.x], { interactive: false, zIndexOffset: 900,
+        icon: L.divIcon({ className: "mark-pin", html: '<span class="ring"></span><span class="dot"></span>', iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
+      if (m.name) pin.bindTooltip(m.name, { permanent: true, direction: "top", offset: [0, -24], className: "player-label" }).openTooltip();
+    }
+    if (MARKS.length && !followName) map.setView([MARKS[0].z, MARKS[0].x], -1, { animate: false });
+  }
+  window.livemap.marks = () => MARKS;
   window.livemap.search = { find: text => { searchBox.value = text; runSearch(); return searchHits.map(h => h.name + " · " + h.kind); },
     go: () => searchHits.length && goTo(searchHits[searchPick]), placesDrawn: () => (poiLayer._placeBoxes || []).length, placeBoxes: () => poiLayer._placeBoxes || [] };
 

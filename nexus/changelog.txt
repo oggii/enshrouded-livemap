@@ -9,6 +9,8 @@
 - Death counter: each player's deaths show next to their name in Players online (hover for
   killed, fell, shroud or drowned, and when). The server reports every death; the map counts
   them and keeps them across restarts (livemap/deaths.json). Deaths=0 in livemap.ini turns it off.
+- Point someone at a spot: a link with &mark=<x>,<z>,<name> opens the map there with a ring and
+  the name on it (several spots joined by ;).
 
 1.7.0
 - The page now wears the game's own map-screen look: the gold frame, separators and player arrow

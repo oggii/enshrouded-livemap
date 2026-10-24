@@ -3,7 +3,8 @@
 // Passes when, around Pike's Port at zoom -1, many place names are drawn and no two of them (or a
 // region name) overlap; none are drawn far out (zoom -3.5); the switch turns them off; the search
 // finds "Pike's Port" first for "pike", a region for "revel" and a player for "brom", and Enter
-// lands within 60 m of Pike's Port at zoom 0 or closer; no page errors.
+// lands within 60 m of Pike's Port at zoom 0 or closer; a link with &mark rings two spots and opens
+// at the first; no page errors.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import http from "node:http";
@@ -72,6 +73,15 @@ await page.waitForTimeout(1200);
 const at = await page.evaluate(() => { const c = window.livemap.map.getCenter(); return { x: c.lng, z: c.lat, zoom: window.livemap.map.getZoom() }; });
 const dist = Math.hypot(at.x - pike[1], at.z - pike[2]);
 check("Enter lands on Pike's Port", dist < 60 && at.zoom >= -0.01, `${dist.toFixed(0)} m off, zoom ${at.zoom}`);
+const marked = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+marked.on("pageerror", e => errors.push(e.message));
+await marked.goto("http://127.0.0.1:" + server.address().port + "/?key=x&mark=3596,1348,Pond;4328,5380,Deep%20lake");
+await marked.waitForFunction(() => document.querySelectorAll(".mark-pin").length === 2, null, { timeout: 20000 }).catch(() => {});
+const view = await marked.evaluate(() => { const c = window.livemap.map.getCenter(); return { x: c.lng, z: c.lat, zoom: window.livemap.map.getZoom(),
+  pins: document.querySelectorAll(".mark-pin").length, labels: [...document.querySelectorAll(".player-label")].map(l => l.textContent) }; });
+check("&mark rings both spots with their names and opens at the first", view.pins === 2 && view.labels.includes("Pond") && view.labels.includes("Deep lake")
+  && Math.hypot(view.x - 3596, view.z - 1348) < 30 && view.zoom === -1, JSON.stringify(view));
+await marked.close();
 check("no page errors", !errors.length, errors.join(" | ") || "none");
 console.log(results.every(Boolean) ? "ALL PASS" : "SOME FAILED");
 await browser.close();

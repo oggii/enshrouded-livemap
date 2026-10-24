@@ -137,7 +137,9 @@ above the world's Flame level, drawn pink as on the game's map (zone levels from
 data, `tools/extract_shroud.py`; the Flame level is the first keyword of the server's A2S_INFO).
 
 Click a player in the list to follow them (click again or drag the map to stop). Add
-`&follow=<name>` to the link to follow that player whenever they are online.
+`&follow=<name>` to the link to follow that player whenever they are online. To point someone
+at a spot, add `&mark=<x>,<z>,<name>` (several joined by `;`): the map opens there with a ring
+and the name on it.
 
 Each player's deaths since the map was installed show next to their name (☠ 3); hover it for
 how (killed, fell, shroud, drowned) and when the last one was. The server reports every death
