@@ -108,6 +108,7 @@ stops the IP lookup entirely.
 | `Bases` | `1` | The players' Flame Altars on the map. |
 | `Discovered` | `1` | Which places each player discovered and where they have been (filter and fog of war). |
 | `Deaths` | `1` | Count each player's deaths (shown next to the name, saved in `livemap/deaths.json`). |
+| `Objects` | `1` | Chests looted or not, locks, barriers and switches, and creatures near the players, read from the server's loaded world. |
 | `Log`, `LogDiagnostics` | `1` | Log file and periodic diagnostics. |
 
 ## The map
@@ -140,6 +141,12 @@ Click a player in the list to follow them (click again or drag the map to stop).
 `&follow=<name>` to the link to follow that player whenever they are online. To point someone
 at a spot, add `&mark=<x>,<z>,<name>` (several joined by `;`): the map opens there with a ring
 and the name on it.
+
+The server also tells which chests are looted (its own state, not a guess: a looted chest stays
+looted), which locked doors and chests were picked and which magic barriers and switches were
+used, and what lives around the players: enemies, animals and bosses with their health, live. It
+only holds the world within about 500 m of each player, so chests and switches show the last
+state it saw there; `livemap/objects.json` keeps it.
 
 Each player's deaths since the map was installed show next to their name (☠ 3); hover it for
 how (killed, fell, shroud, drowned) and when the last one was. The server reports every death

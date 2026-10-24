@@ -457,3 +457,42 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   killed by an enemy: cause 0 with a causeGuid; fall: cause 1; drowned in a pond: cause 3,
   drowned 1. The position is where the player died (the drowning 23 m from the pond's middle).
   userId is 0 on the dedicated server.
+
+## 21. The loaded world: chests, locks, switches, creatures (24 Oct 2026)
+
+Read-only memory analysis on the test server (build 26083076); intel on component names from the
+MIT client map github.com/nicolasferreiraxn/Enshrouded-Interactive-Map (live.rs, client side).
+
+- World: the service registry hook sees "ecs::EntityGrid" at world start; it sits at world +
+  0x1f8 and, like the world, starts with the type registry ([world] == [world+0x1f8]). Registry:
+  +0x08 type descriptors (0x100 bytes each, sorted by name; +0x10 name, +0x18 name length, +0x20
+  FNV-1a 32 of "keen::ecs::<Name>", +0x38 element size), +0x10 their count (0x280). The older
+  `find_type_table` search never found this table (it tried strides up to 128).
+- Archetypes: pointer table at [world+0x130], capacity u32 at world+0x140; empty slots hold 0 or
+  one shared sentinel, a real archetype appears once (353 at the time). Archetype: +0 bitset of
+  type indices (0x50 bytes), +0x50 first chunk, +0x84 / +0xa84 u16 offset / element size per
+  type. Chunk: +0x08 next, +0x10 u32 entity count, +0x14 u16 offset of the 16-byte entity ids,
+  +0x18 u16 offset of the TemplateInfo pointers ({GUID, +0x10 name, +0x18 name length}), so every
+  entity's template name is readable. Entity ids change when an area reloads.
+- Chests (verified): RandomLootContainer (12 B) + InventoryEmptyState {toggleVFX, isEmpty} with a
+  LootChest_* template; SceneLootNodeId (u32) is a stable id per placed chest; RandomLootLock
+  {isEmpty} (saved) appears on looted ones. The one chest looted during the test showed isEmpty 1
+  and the lock; 31 others 0. All world chests had spawnedLootVersion 0 (only spawners and trash
+  heaps count up): world chests most likely never refill (not yet watched over time).
+- Locks and switches: InteractionLock runtime {destroy, itemUsed} (2 B; on every chest and piece
+  of furniture, meaningful on *_Locked_* templates); ServerToggleState {state, lastChange +8 ns,
+  isExtinguished +0x10} (24 B, saved; braziers, lanterns, beehives, spawners ... and, expected,
+  barriers, levers and secret doors); MagicalBarrier is a tag. None of the latter were loaded
+  during the analysis: the DLL logs every new TOGGLE template once to settle it in game.
+- Creatures (verified): NetworkHealth {health, healthMax}, NetworkEnemy {state u8 (2 idle, 3 dead,
+  6 combat, 15 roaming), awareness level u8, awareness float}, NetworkLevel u16; bosses carry the
+  Boss tag and BossHealthBar {displayName loca, maxPlayerDistance}. Only boss templates name the
+  creature (25, tools/extract_pois.py writes them to pois.json creatureNames); the page names the
+  rest from the template name.
+- Scope (verified): only loaded entities are in the ECS, about 500 m around each player, plus an
+  always-loaded set (spires, teleporters, map labels) and about 100 m around Flame Altars. The map
+  therefore shows chests and switches with their last state seen and creatures live.
+- The DLL walks the archetypes that hold the wanted components every 2 s from the player table
+  hook (game thread), reads whole component columns per chunk with guarded reads and keeps
+  chests and switches in livemap/objects.json (/objects), creatures live (/creatures).
+

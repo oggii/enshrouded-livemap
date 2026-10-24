@@ -192,6 +192,16 @@ DWORD WINAPI start(LPVOID) {
     } else {
         livemap::log("death counts off in livemap.ini (Deaths=0)");
     }
+    const std::wstring objects_path = dir + L"\\livemap\\objects.json";
+    if (config.objects) {
+        if (read_file(objects_path, text) && livemap::world::objects_store().from_json(text)) {
+            livemap::log("objects: %zu chests, %zu locks/switches loaded", livemap::world::objects_store().chests(),
+                         livemap::world::objects_store().switches());
+        }
+        livemap::world::enable_objects();
+    } else {
+        livemap::log("chests, switches and creatures off in livemap.ini (Objects=0)");
+    }
     const std::wstring finds_path = dir + L"\\livemap\\finds.json";
     if (read_file(finds_path, text)) {
         if (livemap::world::store().from_json(text)) {
@@ -215,6 +225,7 @@ DWORD WINAPI start(LPVOID) {
     }
     uint64_t discovered_saved = livemap::world::discovered_store().version();
     uint64_t deaths_saved = livemap::world::deaths_store().version();
+    uint64_t objects_saved = livemap::world::objects_store().version(), last_objects_save = 0;
     uint64_t explored_saved = livemap::world::explored_store().version();
     uint64_t last_discovered = 0, last_explored = 0, last_explored_save = 0;
     uint64_t saved_version = livemap::world::store().version();
@@ -244,6 +255,12 @@ DWORD WINAPI start(LPVOID) {
         if (config.deaths && livemap::world::deaths_store().version() != deaths_saved) {
             const uint64_t version = livemap::world::deaths_store().version();
             if (write_file_atomic(deaths_path, livemap::world::deaths_store().to_json())) deaths_saved = version;
+        }
+        // Chests and switches: saved at most every 10 s when they changed.
+        if (config.objects && now - last_objects_save >= 10'000 && livemap::world::objects_store().version() != objects_saved) {
+            last_objects_save = now;
+            const uint64_t version = livemap::world::objects_store().version();
+            if (write_file_atomic(objects_path, livemap::world::objects_store().objects_json())) objects_saved = version;
         }
         // Discovered places: read every 5 s, saved the same way when they changed.
         if (config.discovered && now - last_discovered >= 5'000) {

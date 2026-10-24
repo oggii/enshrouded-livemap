@@ -251,6 +251,27 @@ def load_regions(server_dir, texts, instances):
 PLACE_NAME_MAX_REPEATS = 7
 
 
+# Boss names as the game shows them over their health bar (BossHealthBar.displayName), by template
+# name: the map's creature layer gets the rest of the names from the template names.
+def load_creature_names(server_dir, texts):
+    names = {}
+    for path in glob.glob(os.path.join(server_dir, "TemplateResource", "*.json")):
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            continue
+        if '"keen::ecs::BossHealthBar"' not in text:
+            continue
+        d = json.loads(text)
+        for c in d.get("components") or []:
+            if c.get("$type") == "keen::ecs::BossHealthBar":
+                tag = (c.get("$value") or {}).get("displayName")
+                name = (texts.by_guid(tag) or "").strip() if tag else ""
+                if name and d.get("name"):
+                    names[d["name"]] = name
+    return dict(sorted(names.items()))
+
+
 def load_places(server_dir, texts, region_names):
     tpls = {}
     for path in glob.glob(os.path.join(server_dir, "TemplateResource", "*.json")):
@@ -367,6 +388,8 @@ def main():
         print(f"regions: {data['regions']}", file=sys.stderr)
         data["places"] = load_places(a.server, names[0], {r[0] for r in data["regions"]})
         print(f"{len(data['places'])} place names", file=sys.stderr)
+        data["creatureNames"] = load_creature_names(a.server, names[0])
+        print(f"{len(data['creatureNames'])} boss names", file=sys.stderr)
     text = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(text)

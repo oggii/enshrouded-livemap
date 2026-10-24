@@ -12,6 +12,14 @@
 - Death counter: each player's deaths show next to their name in Players online (hover for
   killed, fell, shroud or drowned, and when). The server reports every death; the map counts
   them and keeps them across restarts (livemap/deaths.json). Deaths=0 in livemap.ini turns it off.
+- Chests the way the server knows them: looted or still full, straight from the game's own state
+  instead of a 30-minute guess (world chests do not seem to refill). Looted chests the map data
+  does not have get their own marker.
+- Locks, magic barriers and switches: picked locks, opened barriers, pulled levers and used secret
+  doors on the map, with when.
+- Creatures near the players, live: enemies (brighter in a fight), animals and bosses with their
+  name, level and health. Switch "Creatures near players" under Overlays. Objects=0 turns all of
+  this off.
 - Point someone at a spot: a link with &mark=<x>,<z>,<name> opens the map there with a ring and
   the name on it (several spots joined by ;).
 

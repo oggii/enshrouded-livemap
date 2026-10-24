@@ -17,6 +17,7 @@
 #include "log.h"
 #include "memory.h"
 #include "names.h"
+#include "scene.h"
 #include "text.h"
 
 #include "items_generated.h"
@@ -65,6 +66,9 @@ SafetyHookMid g_death_hook;
 finds::Store g_finds;
 bases::Store g_bases;
 deaths::Store g_deaths;
+objects::Store g_objects;
+std::atomic<bool> g_objects_on{false};
+uint64_t g_objects_ms = 0;  // game thread only
 discovered::Store g_discovered;
 explored::Store g_explored;
 bool g_discovered_off = false;  // layout not recognised once: stop looking
@@ -147,9 +151,21 @@ void probe_step(uintptr_t manager) {
     g_probe_at_ms.store(GetTickCount64() + 2000, std::memory_order_relaxed);
 }
 
+int64_t unix_now();
+
+// The player table update runs on the game thread every tick: the place to read the loaded
+// world (chests, switches, creatures) every 2 s, between the ECS's own changes.
 void on_player_table(SafetyHookContext& ctx) {
     g_manager.store(ctx.rcx, std::memory_order_relaxed);
     probe_step(ctx.rcx);
+    if (!g_objects_on.load(std::memory_order_relaxed)) return;
+    const uint64_t now = GetTickCount64();
+    if (now - g_objects_ms < 2000) return;
+    g_objects_ms = now;
+    scene::Pass pass;
+    if (!scene::walk(pass)) return;
+    g_objects.update(pass.chests, pass.switches, unix_now());
+    g_objects.set_creatures(std::move(pass.creatures));
 }
 
 // Every entity the movement system moves passes here; only players are kept.
@@ -280,6 +296,16 @@ bool guess_position(uintptr_t record, double& x, double& y, double& z) {
 
 void resolve_types(uintptr_t system, uint16_t offer_index, uintptr_t record) {
     if (g_types_state.load(std::memory_order_relaxed) != 0) return;
+    // The world's type registry (scene.cpp) has every index by hash; the older search below
+    // stays as the fallback.
+    g_idx_transform = scene::type_index(kHashCurrentTransform);
+    g_idx_random_loot = scene::type_index(kHashRandomLootContainer);
+    if (g_idx_transform >= 0 && g_idx_random_loot >= 0 && component_size(record, g_idx_transform) == kTransformSize) {
+        log("CHEST type indices from the world registry: CurrentTransform=%d RandomLootContainer=%d", g_idx_transform,
+            g_idx_random_loot);
+        g_types_state.store(1, std::memory_order_relaxed);
+        return;
+    }
     uintptr_t owner = 0, world = 0, registry = 0;
     if (!read_ptr(system, owner) || !read_ptr(owner + 0x30, world) || !read_ptr(world, registry)) {
         log("CHEST registry not readable (system %llx)", static_cast<unsigned long long>(system));
@@ -449,6 +475,7 @@ void on_registry(SafetyHookContext& ctx) {
     }
     log("SERVICE %-40s %llx", name, static_cast<unsigned long long>(ctx.r8));
     if (std::strcmp(name, "WeatherSystem") == 0) g_weather_system.store(ctx.r8, std::memory_order_relaxed);
+    if (std::strcmp(name, "ecs::EntityGrid") == 0) scene::set_entity_grid(ctx.r8);
 }
 
 void log_raw_slot(int index, uintptr_t slot) {
@@ -559,6 +586,12 @@ finds::Store& store() { return g_finds; }
 bases::Store& bases_store() { return g_bases; }
 discovered::Store& discovered_store() { return g_discovered; }
 deaths::Store& deaths_store() { return g_deaths; }
+objects::Store& objects_store() { return g_objects; }
+
+void enable_objects() {
+    g_objects_on.store(true, std::memory_order_relaxed);
+    log("chests, switches and creatures: read from the loaded world every 2 s");
+}
 explored::Store& explored_store() { return g_explored; }
 
 void refresh_explored() {
@@ -807,6 +840,8 @@ std::string snapshot_json() {
     out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null"));
     out += ",\"discoveredVersion\":" + std::to_string(g_discovered.version());
     out += ",\"deathsVersion\":" + std::to_string(g_deaths.version());
+    out += ",\"objectsVersion\":" + std::to_string(g_objects.version());
+    out += ",\"creaturesVersion\":" + std::to_string(g_objects.creatures_version());
     out += ",\"exploredVersion\":" + std::to_string(g_explored.version()) + "}";
     return out;
 }

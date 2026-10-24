@@ -388,6 +388,14 @@
     ore: '<path d="M4 20 L15 9" stroke="#120e18" stroke-width="5" stroke-linecap="round"/>'
       + '<path d="M4 20 L15 9" stroke="COLOR" stroke-width="2.5" stroke-linecap="round"/>'
       + '<path d="M9 5c4-2 8-2 12 2-3 0-6 1-8 3-1-2-2-3-4-5z" fill="COLOR" stroke="#120e18" stroke-width="1.5" stroke-linejoin="round"/>',
+    lock_closed: '<path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#120e18" stroke-width="4.5"/>'
+      + '<path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="COLOR" stroke-width="2.2"/>'
+      + '<rect x="5" y="11" width="14" height="10" rx="1.5" fill="COLOR" stroke="#120e18" stroke-width="1.5"/>'
+      + '<circle cx="12" cy="15.5" r="1.6" fill="#120e18"/>',
+    lock_open: '<path d="M8 11V7a4 4 0 0 1 7.6-1.8" fill="none" stroke="#120e18" stroke-width="4.5"/>'
+      + '<path d="M8 11V7a4 4 0 0 1 7.6-1.8" fill="none" stroke="COLOR" stroke-width="2.2"/>'
+      + '<rect x="5" y="11" width="14" height="10" rx="1.5" fill="COLOR" stroke="#120e18" stroke-width="1.5"/>'
+      + '<path d="M8.5 16l2.3 2.3 4.7-4.6" fill="none" stroke="#120e18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     looted: '<path d="M3 9a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2H3z" fill="#6b6b75" stroke="#120e18" stroke-width="1.5"/>'
       + '<path d="M3 11h18v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="#6b6b75" stroke="#120e18" stroke-width="1.5"/>'
       + '<path d="M7 13.5l3.5 3.5L17 10" fill="none" stroke="#9fd36f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -673,9 +681,10 @@
               ctx.strokeText(t, x, y); ctx.fillText(t, x, y);
               this._push(x, y, 14, p);
             } else {
-              const record = lootedByPoi.size && !p.isFind ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
-              const looted = record && lootState(record) ? record : null;
-              if (p[5] && p[5].chest && !lootState(p[5].chest)) continue;   // a looted chest not in the data, refilled
+              const idx = (lootedByPoi.size || chestByPoi.size) && !p.isFind ? poiData.pois.indexOf(p) : -1;
+              const real = idx >= 0 ? chestByPoi.get(idx) : null, record = idx >= 0 ? lootedByPoi.get(idx) : null;
+              const looted = real ? (real.empty ? real : null) : record && lootState(record) ? record : null;
+              if (p[5] && p[5].chest && !p[5].real && !lootState(p[5].chest)) continue;   // a looted chest not in the data, refilled
               if (looted && hideLooted) continue;
               if (looted && lootedSprite) ctx.drawImage(lootedSprite.canvas, x - lootedSprite.w / 2, y - lootedSprite.w / 2, lootedSprite.w, lootedSprite.w);
               else ctx.drawImage(sp.canvas, x - half, y - half, dw, dw);
@@ -774,9 +783,13 @@
         return;
       }
       const p = h.p[best];
-      const record = !p.isFind && lootedByPoi.size ? lootedByPoi.get(poiData.pois.indexOf(p)) : null;
+      const idx = !p.isFind && (lootedByPoi.size || chestByPoi.size) ? poiData.pois.indexOf(p) : -1;
+      const record = idx >= 0 ? lootedByPoi.get(idx) : null, real = idx >= 0 ? chestByPoi.get(idx) : null;
       let lootText = "";
-      if (record) {
+      if (real) {
+        lootText = real.empty ? " · looted" + (record ? " by " + record.by : "") + ", seen " + fmtDay(real.at) + " (the server's own state)"
+          : " · still full (the server's own state)";
+      } else if (record) {
         const st = lootState(record);
         lootText = st ? " · looted by " + record.by + ", " + fmtDay(record.at)
             + (st.never ? " · in a base: does not refill" : " · refills in about " + st.left + " min")
@@ -864,13 +877,68 @@
     for (const p of data.pois) if (p[5]) p.isFind = true;
   }
 
+  // The server's view of the loaded world (/objects, livemap/objects.json): every chest it has
+  // had loaded, looted or not, keyed to the nearest chest in the data within 3 m (looted ones
+  // without a match get their own marker), and locks, magic barriers and switches with the last
+  // state seen. The game does not seem to refill world chests, so this state replaces the
+  // refill guess wherever it is known.
+  let objectsData = null, objectsVersion = -1, objectsFetching = false, chestByPoi = new Map();
+  const chestGrade = t => /gold/i.test(t) ? "gold" : /silver/i.test(t) ? "silver" : /sarcophag/i.test(t) ? "sarcophagus" : "wooden";
+  function switchName(s) {
+    if (s.k === "b" || /barrier/i.test(s.t)) return "Magic barrier";
+    if (/chest|loot/i.test(s.t)) return "Locked chest";
+    if (/secret/i.test(s.t)) return "Secret door";
+    if (/lever/i.test(s.t)) return "Lever";
+    if (/button/i.test(s.t)) return "Button";
+    if (/door|gate/i.test(s.t)) return s.k === "l" ? "Locked door" : "Door";
+    return "Switch";
+  }
+  function switchState(s) {
+    return s.k === "l" ? (s.on ? "unlocked" : "locked") : s.k === "b" ? (s.on ? "open" : "closed") : (s.on ? "used" : "not used yet");
+  }
+  function applyObjects(data, objects) {
+    chestByPoi = new Map();
+    if (!objects) return;
+    const lootCats = new Set();
+    data.categories.forEach((c, i) => { if (c.id.startsWith("chest") || c.id === "sarcophagus") lootCats.add(i); });
+    const cat = (id, label, color, def) => {
+      let i = data.categories.findIndex(c => c.id === id);
+      if (i < 0) { data.categories.push({ id, label, color, on: true, label_default: def }); i = data.categories.length - 1; }
+      return i;
+    };
+    const add = p => { p.isFind = true; data.pois.push(p); };
+    for (const c of objects.chests || []) {
+      let best = -1, bestD = 9;
+      for (let i = 0; i < data.pois.length; i++) {
+        const p = data.pois[i];
+        if (p[5] || !lootCats.has(p[0])) continue;
+        const dx = p[1] - c.x, dz = p[3] - c.z, d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (best >= 0) chestByPoi.set(best, c);
+      else if (c.empty) add([cat("looted", "Looted chests (not in the data)", "#6b6b75", "Looted chest"), c.x, c.y, c.z,
+        "Looted chest (" + chestGrade(c.t) + ") · seen " + fmtDay(c.at), { find: true, chest: c, real: true }]);
+    }
+    for (const s of objects.switches || []) {
+      const i = s.on ? cat("lock_open", "Unlocked & opened", "#8fd16a", "Opened") : cat("lock_closed", "Locked & closed", "#e0a35a", "Closed");
+      add([i, s.x, s.y, s.z, switchName(s) + " · " + switchState(s) + (s.on ? " since " : " · seen ") + fmtDay(s.at), { find: true, sw: s }]);
+    }
+  }
+  function maybeRefreshObjects(version) {
+    if (version === undefined || version === objectsVersion || objectsFetching || !rawPoiData) return;
+    objectsFetching = true;
+    fetch("objects" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) { objectsData = d; objectsVersion = d.version; rebuildPois(); }
+    }).catch(() => {}).finally(() => { objectsFetching = false; });
+  }
+
   function preparePois(data) {
     const byCat = data.categories.map(c => ({ c, pts: [] }));
     for (const p of data.pois) {
       if (p.length < 5 || p[4] === undefined) p[4] = data.categories[p[0]].label_default || data.categories[p[0]].label;
       byCat[p[0]].pts.push(p);
     }
-    const isLoot = c => c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted";
+    const isLoot = c => c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted" || c.id.startsWith("lock_");
     const isFind = c => c.id.startsWith("ore:");
     data.groups = {
       loot: byCat.filter(g => isLoot(g.c)),
@@ -896,7 +964,8 @@
     list.innerHTML = "";
     let lastGroup = "";
     for (const c of data.categories) {
-      const group = c.id === "altar" ? "Bases" : c.id.startsWith("ore:") ? "Finds" : c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted" ? "Loot" : "Places";
+      const group = c.id === "altar" ? "Bases" : c.id.startsWith("ore:") ? "Finds"
+        : c.id.startsWith("chest") || c.id === "sarcophagus" || c.id === "fishing" || c.id === "looted" || c.id.startsWith("lock_") ? "Loot" : "Places";
       if (group !== lastGroup) {
         const h = document.createElement("div"); h.className = "group"; h.textContent = group; list.appendChild(h);
         lastGroup = group;
@@ -952,13 +1021,23 @@
     const pb = pl.querySelector("input");
     pb.checked = showPlaces;
     pb.onchange = () => { showPlaces = pb.checked; try { localStorage.setItem("livemap.places", showPlaces ? "1" : "0"); } catch {} poiLayer.schedule(); };
-    list.prepend(wxHead, wx, sh, fg, rg, pl);
+    const cr = document.createElement("label");
+    cr.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#c8463a"></span><span class="t">Creatures near players</span>';
+    const cb2 = cr.querySelector("input");
+    cb2.checked = showCreatures;
+    cb2.onchange = () => {
+      showCreatures = cb2.checked;
+      try { localStorage.setItem("livemap.creatures", showCreatures ? "1" : "0"); } catch {}
+      if (showCreatures) { creatureLayer.addTo(map); creaturesVersion = -1; } else { creatureLayer.remove(); }
+      drawCreatures();
+    };
+    list.prepend(wxHead, wx, sh, fg, rg, pl, cr);
     shroudLabel();
     const dHead = document.createElement("div"); dHead.className = "group"; dHead.textContent = "Discovered";
     const dRow = document.createElement("div"); dRow.className = "disc";
     dRow.innerHTML = '<select id="discMode"><option value="all">All places</option><option value="known">Discovered</option>'
       + '<option value="unknown">Not discovered</option></select><select id="discBy"></select><span class="disc-note" id="discNote"></span>';
-    pl.after(dHead, dRow);
+    cr.after(dHead, dRow);
     const modeSel = dRow.querySelector("#discMode"), bySel = dRow.querySelector("#discBy");
     modeSel.value = discMode;
     modeSel.onchange = () => { discMode = modeSel.value; try { localStorage.setItem("livemap.discMode", discMode); } catch {} poiLayer.invalidate(); };
@@ -979,6 +1058,7 @@
     for (const [i, k] of Object.entries(data.discoveryKeys || {})) if (data.pois[+i]) data.pois[+i].k = k;
     applyBases(data, basesData);
     applyFinds(data, findsData);
+    applyObjects(data, objectsData);
     poiData = data;
     discInvalidate();
     preparePois(data);
@@ -1158,6 +1238,59 @@
       poiLayer.invalidate();
     }).catch(() => {}).finally(() => { discFetching = false; });
   }
+
+  // Creatures (/creatures, every 2 s): what the server has loaded around the players right now.
+  // Enemies red (brighter in a fight), animals pale, bosses large with their name. The server
+  // knows names for bosses only (pois.json creatureNames); other kinds come from the template.
+  let showCreatures = (() => { try { return localStorage.getItem("livemap.creatures") !== "0"; } catch { return true; } })();
+  const creatureRenderer = L.canvas({ padding: 0.3 });
+  const creatureLayer = L.layerGroup();
+  const creatureMarks = new Map();
+  let creaturesData = null, creaturesVersion = -1, creaturesFetching = false;
+  const CREATURE_KINDS = [[/willowisp/i, "Will-o'-wisp"], [/icewisp/i, "Ice wisp"], [/hound/i, "Hound"], [/wolf/i, "Wolf"],
+    [/sabertooth/i, "Sabertooth"], [/boar/i, "Boar"], [/(^|_)rat(_|$)/i, "Rat"], [/(^|_)bat(_|$)/i, "Bat"], [/wasp/i, "Wasp"],
+    [/bunny/i, "Bunny"], [/catdeer/i, "Catdeer"], [/yak/i, "Yak"], [/goat/i, "Goat"], [/sanddigger/i, "Sanddigger"],
+    [/vulture/i, "Vulture"], [/spider/i, "Spider"], [/critter/i, "Critter"], [/slime/i, "Slime"], [/tentacle/i, "Tentacle"],
+    [/spitter/i, "Spitter"], [/cyclops/i, "Cyclops"], [/vukah/i, "Vukah"], [/skeleton/i, "Skeleton"], [/lizardpeople|drak/i, "Drak"],
+    [/scavenger/i, "Scavenger"], [/fogger/i, "Fell"], [/ancientconstruct/i, "Ancient construct"], [/fish/i, "Fish"]];
+  function creatureName(c) {
+    const known = rawPoiData && rawPoiData.creatureNames && rawPoiData.creatureNames[c.t];
+    if (known) return known;
+    for (const [re, name] of CREATURE_KINDS) if (re.test(c.t)) return name + (/elite/i.test(c.t) ? " (elite)" : "");
+    return c.t.replace(/^(Enemy|Animal)_/i, "").split("_")[0].replace(/([a-z])([A-Z])/g, "$1 $2");
+  }
+  function drawCreatures() {
+    if (!showCreatures || !creaturesData) { creatureLayer.clearLayers(); creatureMarks.clear(); return; }
+    const seen = new Set();
+    for (const c of creaturesData.creatures) {
+      const key = c.e + "|" + c.t, fight = c.s === 6;
+      seen.add(key);
+      const style = c.boss ? { radius: 8, color: "#ffd27a", weight: 2, fillColor: "#e0412f", fillOpacity: 1 }
+        : c.animal ? { radius: 3, color: "#1a1208", weight: 1, fillColor: "#d8c79a", fillOpacity: 0.9 }
+        : { radius: fight ? 5 : 4, color: "#1a1208", weight: 1, fillColor: fight ? "#ff5a3c" : "#c8463a", fillOpacity: 0.95 };
+      const text = creatureName(c) + (c.lv ? " · Lv " + c.lv : "") + " · " + c.hp + "/" + c.max + " HP" + (fight ? " · fighting" : "");
+      let m = creatureMarks.get(key);
+      if (!m) {
+        m = L.circleMarker([c.z, c.x], { renderer: creatureRenderer, ...style })
+          .bindTooltip(text, { direction: "top", offset: [0, -8], permanent: !!c.boss, className: c.boss ? "player-label" : "" });
+        m.addTo(creatureLayer);
+        creatureMarks.set(key, m);
+      } else {
+        m.setLatLng([c.z, c.x]);
+        m.setStyle(style);
+        m.setTooltipContent(text);
+      }
+    }
+    for (const [k, m] of creatureMarks) if (!seen.has(k)) { creatureLayer.removeLayer(m); creatureMarks.delete(k); }
+  }
+  function maybeRefreshCreatures(version) {
+    if (version === undefined || version === creaturesVersion || creaturesFetching || !showCreatures) return;
+    creaturesFetching = true;
+    fetch("creatures" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) { creaturesData = d; creaturesVersion = d.version; drawCreatures(); }
+    }).catch(() => {}).finally(() => { creaturesFetching = false; });
+  }
+  if (showCreatures) creatureLayer.addTo(map);
 
   // Deaths per player (counted by the server since the map was installed): "☠ 3" after the name.
   let deathsData = null, deathsVersion = -1, deathsFetching = false;
@@ -1701,6 +1834,8 @@
   });
   searchList.addEventListener("mousedown", e => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
   window.livemap.deaths = { of: deathsOf, data: () => deathsData };
+  window.livemap.objects = { chests: () => [...chestByPoi].map(([i, c]) => ({ poi: i, empty: c.empty, t: c.t })), data: () => objectsData,
+    creatures: () => [...creatureMarks.values()].map(m => ({ ll: m.getLatLng(), text: m.getTooltip().getContent(), r: m.options.radius })) };
 
   // A link with &mark=x,z,Name (several joined by ";") puts a pulsing ring with that name on each
   // spot and opens the map at the first one: to point someone at a place.
@@ -1849,6 +1984,8 @@
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
     maybeRefreshDeaths(state.deathsVersion);
+    maybeRefreshObjects(state.objectsVersion);
+    maybeRefreshCreatures(state.creaturesVersion);
     maybeRefreshDiscovered(state.discoveredVersion);
     maybeRefreshExplored(state.exploredVersion);
     let revealed = false;
