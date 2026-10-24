@@ -1,9 +1,15 @@
+![Enshrouded Live Map](nexus/banner-1600x400.jpg)
+
 # Enshrouded Live Map
 
-A server-side mod for Enshrouded dedicated servers. The server serves a web map: players with
-names and walking direction, in-game clock and real time, weather, all map markers from the
-game's data, ore deposits players mined and chests they opened. Players install nothing; they
-open a link in the browser.
+A server-side mod for Enshrouded dedicated servers. The server serves a web map in the game's
+own look: players live with names and walking direction, the in-game clock and real time, rain
+and snow where they fall, the region names and all map markers from the game's data, the
+deadly shroud above your Flame level, fog of war and discovered places per player, and the ore
+deposits players mined and the chests they opened. Players install nothing; they open a link
+in the browser, on PC, tablet or phone. Also on [Nexus Mods](https://www.nexusmods.com/enshrouded/mods/209).
+
+![The whole world in the game's own look, with its region names](nexus/screens/01-overview.jpg)
 
 ## Install
 
@@ -140,6 +146,19 @@ relief by `tools/enhance_map.py`. Unzip it over the install; it adds `livemap/ti
 
 Shared XP 1.1.3 or newer. Both mods add a line to the chat after "Player X joined." and can run together; whichever starts
 second adds its hook on top of the first one.
+
+## Screenshots
+
+Made from the real page and map with sample players (`tools/perf/promo_shots.mjs`).
+
+| | |
+|---|---|
+| ![Players live](nexus/screens/02-players.jpg) | ![Fog of war and discovered places](nexus/screens/03-fog-discovered.jpg) |
+| Players live with their walking direction; click a name to follow | Fog of war and discovered places, per player |
+| ![Deadly shroud](nexus/screens/04-deadly-shroud.jpg) | ![Finds](nexus/screens/05-finds.jpg) |
+| The deadly shroud above your world's Flame level | Ore veins, looted chests and Flame Altars, saved for everyone |
+| ![Layout](nexus/screens/06-layout.jpg) | ![HD map style](nexus/screens/07-hd-overview.jpg) |
+| Move the panels where you like; a layout for phones | The optional HD map style |
 
 ## Build
 
