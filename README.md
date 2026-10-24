@@ -142,6 +142,11 @@ Click a player in the list to follow them (click again or drag the map to stop).
 at a spot, add `&mark=<x>,<z>,<name>` (several joined by `;`): the map opens there with a ring
 and the name on it.
 
+Type an item into the search ("animal fur", "iron ore", a weapon's name) to see where to get it:
+the enemies that drop it, the chests and containers that can hold it, each with its chance and
+how far the nearest one is. Pick a source and the map rings all its places and flies to the
+nearest. It comes from the game's own loot tables (`tools/build_drops.py`, `tools/loot_for_page.py`).
+
 The server also tells which chests are looted (its own state, not a guess: a looted chest stays
 looted), which locked doors and chests were picked and which magic barriers and switches were
 used, and what lives around the players: enemies, animals and bosses with their health, live. It

@@ -496,3 +496,36 @@ MIT client map github.com/nicolasferreiraxn/Enshrouded-Interactive-Map (live.rs,
   hook (game thread), reads whole component columns per chunk with guarded reads and keeps
   chests and switches in livemap/objects.json (/objects), creatures live (/creatures).
 
+## 22. Where loot comes from (24 Oct 2026)
+
+Offline, from the unpacked server data (tools/build_drops.py; judged against the drop table of the
+MIT client map github.com/nicolasferreiraxn/Enshrouded-Interactive-Map, which has no chances: 80 %
+of its enemy-family entries are found, 92 % of ours are confirmed by it).
+
+- Labels: every container and enemy has a set of tags (tag id = FNV-1a 32 of the tag GUID's
+  little-endian bytes): the template's RandomLoot.defaultLabels (DefaultLootLabelCollection, the
+  kind: gold / silver / wooden chest, enemy, vase, mine tool) plus the placed entity's scene node
+  (SceneRandomLootResource.lootContainer[nodeId] -> lootSettings: a tier band and the region).
+  An item of LootableItemsResource is eligible when one root-to-leaf path of its labelGroups tree
+  is covered by the tags; its weight is the product of the matched label weights.
+- Slots: RandomLootSlotCount draws by weight (gear first picks weapon / shield / armor / ring by the
+  shufflebag weights); rarity only sets the rarity, not the item (wooden chests common/uncommon,
+  silver uncommon to legendary, gold rare to legendary, bosses legendary).
+- Fixed contents: DefaultInventoryResource trees (all stacks, or one by weight in a selector
+  group, gated by the container's tags). Enemies drop through their corpse: Actor.deathSequence ->
+  TransformToLootEvent.defaultInventory or a LootContainer_Enemy_* template (fur, bones, meat,
+  runes); their random labels match no item except for bosses and elites with a chest kind tag.
+- Places: SceneLootNodeId of a placed entity links it to its loot node (in a chunk file
+  spawnData.entries[i] belongs to entities[i]; the start index is indices[s+1] + 256 *
+  indices[s+2]); 61,864 of 61,918 containers resolve and the chest counts match pois.json exactly
+  (350 gold, 954 silver, 1287 wooden, 228 sarcophagi). Enemies are placed through spawners
+  (RandomSpawner and kin, 25,601 spawn points); a spawn point stands for its enemies' position.
+- Specials: 661 guaranteed items each placed in one of N candidate containers; 364 quest items.
+- Coverage: 1766 of 4207 items have a source; most of the rest is crafted (1791) or not loot at
+  all. Not modelled yet: ore and other terrain materials (voxels), fishing, shops, quest rewards.
+- Guessed, to be checked by counting in game: slots drawn independently, the shufflebag step,
+  selector order, template and scene tags joined.
+- tools/loot_for_page.py turns it into web/loot.json for the map: sources with the same name on
+  the map are one group (placement-weighted chance), places kept for groups up to 2000 of them
+  (plants and scatter loot only name their regions); 307 KB gzipped, fetched when the search is used.
+

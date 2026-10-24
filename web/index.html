@@ -98,6 +98,8 @@
   #searchResults li .m .nd { color: #e3a08c; }
   #searchResults li.from { cursor: default; color: var(--muted); font-size: 12px; font-style: italic; padding-top: 6px; }
   #searchResults li.from:hover { background: none; color: var(--muted); }
+  #searchResults li.head { cursor: default; color: var(--gold); font: 700 12px var(--caps); letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px 6px; }
+  #searchResults li.head:hover { background: none; color: var(--gold); }
   #searchResults li[aria-selected="true"], #searchResults li:hover { background: rgba(220, 183, 107, 0.14); color: var(--gold-bright); }
   .search-ping { border: 2px solid var(--gold-bright); border-radius: 50%; box-shadow: 0 0 14px rgba(246, 220, 160, 0.8);
     animation: ping 1.4s ease-out 3; }
@@ -198,7 +200,7 @@
 <div id="map"></div>
 <div id="left">
   <div id="players" class="card"><h2>Players online</h2><ul id="playerList"><li class="placeholder">Connecting…</li></ul></div>
-  <div id="search" class="card"><input id="searchBox" type="search" placeholder="Find a place, player, gold chest…" autocomplete="off"
+  <div id="search" class="card"><input id="searchBox" type="search" placeholder="Find a place, player or item…" autocomplete="off"
     aria-label="Find a place, region or player" aria-controls="searchResults"><ul id="searchResults" role="listbox"></ul></div>
   <button id="poiToggle" type="button" aria-expanded="false" aria-controls="pois">Markers</button>
   <div id="pois" class="card hidden"><h2>Markers <span class="actions"><button id="poiAll" type="button">all / none</button><button id="poiClose" type="button" aria-label="Close the marker panel">✕</button></span></h2><div id="poiList"></div></div>
@@ -894,7 +896,8 @@
     return "Switch";
   }
   function switchState(s) {
-    return s.k === "l" ? (s.on ? "unlocked" : "locked") : s.k === "b" ? (s.on ? "open" : "closed") : (s.on ? "used" : "not used yet");
+    if (s.k === "l") return s.on ? "unlocked" : "locked";
+    return s.k === "b" || /door|gate/i.test(s.t) ? (s.on ? "open" : "closed") : (s.on ? "used" : "not used yet");
   }
   function applyObjects(data, objects) {
     chestByPoi = new Map();
@@ -920,6 +923,7 @@
         "Looted chest (" + chestGrade(c.t) + ") · seen " + fmtDay(c.at), { find: true, chest: c, real: true }]);
     }
     for (const s of objects.switches || []) {
+      if (/crafted|craftable|buildingset|spawnpoint|respawner/i.test(s.t)) continue;   // built by players, enemy spawners
       const i = s.on ? cat("lock_open", "Unlocked & opened", "#8fd16a", "Opened") : cat("lock_closed", "Locked & closed", "#e0a35a", "Closed");
       add([i, s.x, s.y, s.z, switchName(s) + " · " + switchState(s) + (s.on ? " since " : " · seen ") + fmtDay(s.at), { find: true, sw: s }]);
     }
@@ -1257,7 +1261,10 @@
     const known = rawPoiData && rawPoiData.creatureNames && rawPoiData.creatureNames[c.t];
     if (known) return known;
     for (const [re, name] of CREATURE_KINDS) if (re.test(c.t)) return name + (/elite/i.test(c.t) ? " (elite)" : "");
-    return c.t.replace(/^(Enemy|Animal)_/i, "").split("_")[0].replace(/([a-z])([A-Z])/g, "$1 $2");
+    // Else the first word that is not a family, tier or variant word (as tools/loot_for_page.py).
+    const noise = /^(enemy|animal|wildlife|wildbeast|spawnpoints?|poi|signalreceiver|spawninbox|boss|fog|hook|neutral|hover|combat|summonstone|t\d+|\d+|[a-z]|sm|xl|ag\d)$/i;
+    const word = c.t.split("_").find(w => !noise.test(w)) || c.t;
+    return word.replace(/([a-z])([A-Z])/g, "$1 $2");
   }
   function drawCreatures() {
     if (!showCreatures || !creaturesData) { creatureLayer.clearLayers(); creatureMarks.clear(); return; }
@@ -1726,6 +1733,7 @@
     for (const p of (lastState && lastState.players) || []) if (p.pos) add(p.name || "Player " + p.entity, "Player", p.pos[0], p.pos[2], 0);
     for (const [name, x, z] of (rawPoiData && rawPoiData.regions) || []) add(name, "Region", x, z, -2);
     for (const [name, x, z] of PLACES) add(name, "Place", x, z, 0);
+    if (LOOT) for (const it of LOOT.items) out.push({ name: it[1], kind: "Item", x: null, z: null, zoom: 0, item: it });
     if (poiData) for (const p of poiData.pois) {
       if (!p[4] || p.isFind) continue;
       const c = poiData.categories[p[0]];
@@ -1740,6 +1748,28 @@
     const words = h.kind.toLowerCase().split(/[\s&]+/).filter(Boolean);
     return h.name.toLowerCase().split(/\s+/).every(w => words.includes(w)) ? "" : h.kind;
   };
+  // "Where do I get it?" (web/loot.json, built by tools/build_drops.py and tools/loot_for_page.py
+  // from the game's loot tables; fetched the first time the search is used): every item with its
+  // best sources and their chance, and per source its places (chests, enemies' spawn points,
+  // containers) or, for plants and scatter loot found everywhere, its regions. Picking an item
+  // lists its sources; picking a source rings all its places and flies to the nearest.
+  let LOOT = null, lootLoading = false;
+  function loadLoot() {
+    if (LOOT || lootLoading) return;
+    lootLoading = true;
+    fetch("loot.json" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) { LOOT = d; if (searchBox.value.trim().length >= 2 && !searchList.querySelector("li.head")) runSearch(); }
+    }).catch(() => {}).finally(() => { lootLoading = false; });
+  }
+  const SOURCE_KINDS = { enemy: "Enemy", chest: "Chest", container: "Container", node: "Pickup" };
+  function chanceText(c, kind) {
+    if (c >= 0.995) return "always";
+    const p = c * 100, per = kind === "enemy" ? " per kill" : kind === "chest" ? " per chest" : "";
+    return (p >= 10 ? Math.round(p) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + " %" + per;
+  }
+  const lootRenderer = L.canvas({ padding: 0.3 });
+  const lootLayer = L.layerGroup().addTo(map);
+
   // Who "you" are for distances: the followed player, else the one picked under Discovered while
   // online, else the only player online.
   function searchMe() {
@@ -1783,8 +1813,8 @@
     searchHits = [];
     if (q.length >= 2) {
       const rank = n => { const s = n.toLowerCase(); return s.startsWith(q) ? 0 : s.split(/[\s'"(-]+/).some(w => w.startsWith(q)) ? 1 : s.includes(q) ? 2 : 9; };
-      const order = { Player: 0, Region: 1, Place: 2 };
-      const far = e => (e.x - from[0]) ** 2 + (e.z - from[1]) ** 2;
+      const order = { Player: 0, Region: 1, Place: 2, Item: 4 };
+      const far = e => e.x === null ? 0 : (e.x - from[0]) ** 2 + (e.z - from[1]) ** 2;
       const hits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9);
       if (poiData && q.length >= 3) poiData.categories.forEach((cat, ci) => {
         if (!cat.label.toLowerCase().split(/[\s&]+/).some(w => w.startsWith(q))) return;
@@ -1798,6 +1828,11 @@
     searchPick = 0;
     const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     for (const h of searchHits) {
+      if (h.kind === "Item") {
+        const best = h.item[2][0], g = LOOT.groups[best[0]];
+        h.meta = esc("best: " + g[0] + ", " + chanceText(best[1], g[1]) + (h.item[2].length > 1 ? " · " + h.item[2].length + " sources" : ""));
+        continue;
+      }
       const known = searchKnown(h), parts = [];
       if (h.kind !== "Region" && h.kind !== "Player") { const r = regionAt(h.x, h.z); if (r) parts.push(esc(r)); }
       if (me && !(h.kind === "Player" && h.x === me.pos[0] && h.z === me.pos[2])) parts.push(esc(awayText(from, h.x, h.z)));
@@ -1809,7 +1844,53 @@
       + esc(h.name) + '</span><span class="k">' + esc(kindShown(h)) + "</span>" + (h.meta ? '<span class="m">' + h.meta + "</span>" : "") + "</li>").join("")
       + (me && searchHits.length ? '<li class="from" aria-hidden="true">Distances from ' + esc(meName) + "</li>" : "");
   }
+  function showSources(item) {
+    const me = searchMe(), c = map.getCenter(), from = me ? [me.pos[0], me.pos[2]] : [c.lng, c.lat];
+    const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    searchHits = item[2].map(([gi, chance]) => {
+      const g = LOOT.groups[gi], pts = g[4];
+      let near = null;
+      if (pts) for (let i = 0; i < pts.length; i += 2) {
+        const d = (pts[i] - from[0]) ** 2 + (pts[i + 1] - from[1]) ** 2;
+        if (!near || d < near.d) near = { d, x: pts[i], z: pts[i + 1] };
+      }
+      const regions = LOOT.regions.filter((_, i) => (g[3] >> i) & 1);
+      const where = near ? g[2] + (g[2] === 1 ? " place" : " places") + " · nearest " + awayText(from, near.x, near.z)
+        : "found in " + (regions.length > 3 ? regions.length + " regions" : regions.join(", ") || "the world");
+      return { name: g[0], kind: SOURCE_KINDS[g[1]] || g[1], source: true, g, item, x: near ? near.x : null, z: near ? near.z : null, zoom: -0.5,
+        chance, d: near ? near.d : Infinity, meta: esc(chanceText(chance, g[1]) + " · " + where) };
+    }).sort((a, b) => Math.abs(a.chance - b.chance) > 0.02 ? b.chance - a.chance : a.d - b.d);   // about as likely: the nearest first
+    searchPick = 0;
+    searchBox.value = item[1];
+    const meName = me ? me.name || "Player " + me.entity : "";
+    searchList.innerHTML = '<li class="head" aria-hidden="true">Where to get ' + esc(item[1]) + "</li>"
+      + searchHits.map((h, i) => '<li role="option" data-i="' + i + '" aria-selected="' + (i === searchPick) + '"><span>' + esc(h.name)
+        + '</span><span class="k">' + esc(h.kind) + '</span><span class="m">' + h.meta + "</span></li>").join("")
+      + (me ? '<li class="from" aria-hidden="true">Distances from ' + esc(meName) + "</li>" : "");
+  }
+  function stopFollowing() {
+    if (follow !== null) { followName = null; setFollow(null); }
+  }
+  function showSource(h) {
+    lootLayer.clearLayers();
+    stopFollowing();
+    const pts = h.g[4];
+    if (pts) for (let i = 0; i < pts.length; i += 2) {
+      L.circleMarker([pts[i + 1], pts[i]], { renderer: lootRenderer, radius: 6, color: "#f6dca0", weight: 2, fillColor: "#e8b04a", fillOpacity: 0.35,
+        interactive: false }).addTo(lootLayer);
+    }
+    searchList.querySelectorAll("li[data-i]").forEach(li => li.setAttribute("aria-selected", String(+li.dataset.i === searchHits.indexOf(h))));
+    if (h.x === null) return;
+    map.setView([h.z, h.x], Math.max(map.getZoom(), h.zoom), { animate: true });
+    if (searchPing) searchPing.remove();
+    searchPing = L.marker([h.z, h.x], { interactive: false, icon: L.divIcon({ className: "search-ping", iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
+    setTimeout(() => { if (searchPing) { searchPing.remove(); searchPing = null; } }, 4500);
+  }
   function goTo(hit) {
+    if (hit.kind === "Item") return showSources(hit.item);
+    if (hit.source) return showSource(hit);
+    lootLayer.clearLayers();
+    stopFollowing();
     map.setView([hit.z, hit.x], Math.max(map.getZoom(), hit.zoom), { animate: true });
     if (searchPing) searchPing.remove();
     searchPing = L.marker([hit.z, hit.x], { interactive: false, icon: L.divIcon({ className: "search-ping", iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
@@ -1819,6 +1900,7 @@
     searchHits = [];
   }
   searchBox.addEventListener("input", runSearch);
+  searchBox.addEventListener("focus", loadLoot);
   searchBox.addEventListener("keydown", e => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       if (!searchHits.length) return;
@@ -1829,7 +1911,7 @@
       e.preventDefault();
       goTo(searchHits[searchPick]);
     } else if (e.key === "Escape") {
-      searchBox.value = ""; searchList.innerHTML = ""; searchHits = [];
+      searchBox.value = ""; searchList.innerHTML = ""; searchHits = []; lootLayer.clearLayers();
     }
   });
   searchList.addEventListener("mousedown", e => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
@@ -1853,6 +1935,7 @@
   window.livemap.marks = () => MARKS;
   window.livemap.search = { find: text => { searchBox.value = text; runSearch(); return searchHits.map(h => h.name + " · " + h.kind); },
     meta: () => searchHits.map(h => h.meta.replace(/<[^>]+>/g, "")), me: () => { const m = searchMe(); return m ? m.name : null; },
+    loot: () => LOOT, loadLoot, ringed: () => lootLayer.getLayers().length,
     go: () => searchHits.length && goTo(searchHits[searchPick]), placesDrawn: () => (poiLayer._placeBoxes || []).length, placeBoxes: () => poiLayer._placeBoxes || [] };
 
   // Movable panels (wide screens): drag the players, clock or marker panel by its title. It stays

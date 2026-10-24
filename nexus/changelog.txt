@@ -12,6 +12,9 @@
 - Death counter: each player's deaths show next to their name in Players online (hover for
   killed, fell, shroud or drowned, and when). The server reports every death; the map counts
   them and keeps them across restarts (livemap/deaths.json). Deaths=0 in livemap.ini turns it off.
+- Where do I get it? Type an item into the search: the enemies that drop it and the chests and
+  containers that can hold it, with their chance and the nearest one; pick one and the map rings
+  all its places. From the game's own loot tables, for 1766 items.
 - Chests the way the server knows them: looted or still full, straight from the game's own state
   instead of a 30-minute guess (world chests do not seem to refill). Looted chests the map data
   does not have get their own marker.

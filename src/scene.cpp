@@ -186,7 +186,10 @@ std::vector<uint8_t> column(const Arch& a, uintptr_t chunk, uint32_t n, int ti, 
 
 bool in_world(float x, float z) { return x >= 0 && x <= 10240 && z >= 0 && z <= 10240; }
 
+// World doors, barriers, levers and the like; not what players built (crafted doors) and not the
+// enemy spawners whose names mention a door (seen on the test server).
 bool switch_template(const std::string& t) {
+    for (const char* w : {"crafted", "craftable", "buildingset", "spawnpoint", "respawner"}) if (contains(t, w)) return false;
     for (const char* w : {"barrier", "lever", "button", "secret", "switch", "gate", "door", "valve", "seal"}) if (contains(t, w)) return true;
     return false;
 }
