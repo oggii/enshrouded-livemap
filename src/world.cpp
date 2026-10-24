@@ -61,8 +61,10 @@ SafetyHookMid g_registry_hook;
 SafetyHookMid g_mining_hook;
 SafetyHookMid g_chest_hook;
 SafetyHookMid g_bases_hook;
+SafetyHookMid g_death_hook;
 finds::Store g_finds;
 bases::Store g_bases;
+deaths::Store g_deaths;
 discovered::Store g_discovered;
 explored::Store g_explored;
 bool g_discovered_off = false;  // layout not recognised once: stop looking
@@ -372,6 +374,68 @@ void on_base(SafetyHookContext& ctx) {
     g_bases.see(id_lo, id_hi, b, GetTickCount64());
 }
 
+// keen::PlayerDeath, the telemetry event the server builds for every player death (docs/RESEARCH.md
+// section 20). The tracker gets it even when telemetry is off; the map only reads it.
+struct PlayerDeathRaw {
+    uint64_t account;  // accountIdHash
+    uint32_t user;
+    uint8_t cause;     // keen::DeathCause: 0 Impact, 1 FallDamage, 2 Fog, 3 Suffocated
+    uint8_t pad[3];
+    float x, y, z;     // where the player died, metres (y = height)
+    uint8_t cause_guid[16];  // the damage source (Impact only)
+    uint8_t deadly_fog;
+    uint8_t drowned;
+    uint8_t pad2[2];
+};
+static_assert(sizeof(PlayerDeathRaw) == 0x30);
+constexpr const char* kCauseNames[] = {"impact", "fall", "fog", "suffocated"};
+std::array<std::atomic<uint64_t>, kSlotCount> g_death_ms{};  // per slot: when the last death was counted
+
+// Entry of track(PlayerDeath): r8 = the event. The player is the slot with the event's account
+// hash, else the one nearest to where it happened (30 m); a second event for the same player
+// within 3 s is logged but not counted.
+void on_player_death(SafetyHookContext& ctx) {
+    PlayerDeathRaw d{};
+    if (!read_bytes(ctx.r8, &d, sizeof d)) return;
+    const uintptr_t manager = g_manager.load(std::memory_order_relaxed);
+    int by_account = -1, nearest = -1;
+    double best = 30.0 * 30.0;
+    uint64_t slot_account = 0;
+    for (int i = 0; i < kSlotCount; ++i) {
+        const Slot& s = g_slots[i];
+        if (s.entity.load(std::memory_order_relaxed) == 0) continue;
+        uint64_t account = 0;
+        if (manager != 0 && d.account != 0 && read_u64(manager + kSlots + static_cast<uintptr_t>(i) * kStride + 0x48, account) &&
+            account == d.account) {
+            by_account = i;
+        }
+        if (s.seen_ms.load(std::memory_order_relaxed) == 0) continue;
+        const double dx = meters(s.x.load(std::memory_order_relaxed)) - d.x, dz = meters(s.z.load(std::memory_order_relaxed)) - d.z;
+        if (dx * dx + dz * dz < best) { best = dx * dx + dz * dz; nearest = i; }
+    }
+    const int who = by_account >= 0 ? by_account : nearest;
+    if (who >= 0 && manager != 0) read_u64(manager + kSlots + static_cast<uintptr_t>(who) * kStride + 0x48, slot_account);
+    std::string name;
+    if (who >= 0) {
+        std::lock_guard lock(g_names_mutex);
+        name = g_names[who];
+    }
+    char guid[33];
+    for (int i = 0; i < 16; ++i) std::snprintf(guid + i * 2, 3, "%02x", d.cause_guid[i]);
+    const uint64_t now = GetTickCount64();
+    const uint64_t last = who >= 0 ? g_death_ms[who].load(std::memory_order_relaxed) : 0;
+    const bool repeat = last != 0 && now - last < 3000;
+    log("DEATH  cause %u (%s) at %.1f %.1f %.1f fog %u drowned %u acc %016llx user %u guid %s -> slot %d by %s \"%s\" "
+        "slot acc %016llx%s",
+        d.cause, d.cause < 4 ? kCauseNames[d.cause] : "?", d.x, d.y, d.z, d.deadly_fog, d.drowned,
+        static_cast<unsigned long long>(d.account), d.user, guid, who,
+        by_account >= 0 ? "account" : nearest >= 0 ? "position" : "nobody", name.c_str(),
+        static_cast<unsigned long long>(slot_account), repeat ? " (repeat, not counted)" : "");
+    if (who < 0 || name.empty() || repeat) return;
+    g_death_ms[who].store(now, std::memory_order_relaxed);
+    g_deaths.record({name, unix_now(), d.cause, d.x, d.z, d.deadly_fog != 0, d.drowned != 0});
+}
+
 // Service registry entry: rdx = {const char* name, size_t length}, r8 = the service object.
 void on_registry(SafetyHookContext& ctx) {
     uintptr_t name_ptr = 0;
@@ -494,6 +558,7 @@ void append_weather(std::string& out) {
 finds::Store& store() { return g_finds; }
 bases::Store& bases_store() { return g_bases; }
 discovered::Store& discovered_store() { return g_discovered; }
+deaths::Store& deaths_store() { return g_deaths; }
 explored::Store& explored_store() { return g_explored; }
 
 void refresh_explored() {
@@ -570,6 +635,17 @@ void install_bases(const Targets& t) {
     if (!h) { log("could not hook bases: Flame Altars are off"); return; }
     g_bases_hook = std::move(*h);
     log("hooked %-12s at %llx", "bases", static_cast<unsigned long long>(t.bases));
+}
+
+void install_deaths(const Targets& t) {
+    if (t.player_death == 0) {
+        log("player death site not found: death counts are off");
+        return;
+    }
+    auto h = safetyhook::MidHook::create(reinterpret_cast<void*>(t.player_death), on_player_death);
+    if (!h) { log("could not hook player_death: death counts are off"); return; }
+    g_death_hook = std::move(*h);
+    log("hooked %-12s at %llx", "player_death", static_cast<unsigned long long>(t.player_death));
 }
 
 void install_mining(const Targets& t) {
@@ -730,6 +806,7 @@ std::string snapshot_json() {
     const int flame = g_flame_level.load(std::memory_order_relaxed);
     out += ",\"flameLevel\":" + (flame >= 0 ? std::to_string(flame) : std::string("null"));
     out += ",\"discoveredVersion\":" + std::to_string(g_discovered.version());
+    out += ",\"deathsVersion\":" + std::to_string(g_deaths.version());
     out += ",\"exploredVersion\":" + std::to_string(g_explored.version()) + "}";
     return out;
 }

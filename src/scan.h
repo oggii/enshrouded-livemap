@@ -33,6 +33,10 @@ struct Targets {
     // (16-byte BaseId, wasAbandoned at +0x28), [rbp-0x10] = the altar's transform (position
     // 3 x int64 32.32 fixed point), [rbp-0x8] = its build zone (size float3 at +4).
     uintptr_t bases = 0;
+    // Optional: entry of FUN_14004ee70, which hands one keen::PlayerDeath telemetry event to the
+    // tracker; its four callers (suffocated, fall, shroud, hit) call it on every player death.
+    // r8 = the 48-byte event (docs/RESEARCH.md section 20).
+    uintptr_t player_death = 0;
     const char* build = nullptr;  // label of the recognised server build
 };
 

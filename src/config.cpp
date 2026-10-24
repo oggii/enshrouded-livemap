@@ -104,6 +104,7 @@ Config load_config(const std::wstring& dir) {
     c.finds = GetPrivateProfileIntW(L"livemap", L"Finds", 1, path.c_str()) != 0;
     c.bases = GetPrivateProfileIntW(L"livemap", L"Bases", 1, path.c_str()) != 0;
     c.discovered = GetPrivateProfileIntW(L"livemap", L"Discovered", 1, path.c_str()) != 0;
+    c.deaths = GetPrivateProfileIntW(L"livemap", L"Deaths", 1, path.c_str()) != 0;
     c.chat_probe = GetPrivateProfileIntW(L"livemap", L"ChatProbe", 0, path.c_str()) != 0;
     return c;
 }

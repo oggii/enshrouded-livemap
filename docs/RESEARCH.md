@@ -434,3 +434,22 @@ Minimap uses), `sample(out[4], weather, position, time)` -> weights Clear / Rain
   `hairline_horizontal`, `fancy_box_background_pattern`, `player_position`) via
   `tools/kfc_content.py`.
 
+## 20. Player deaths (24 Oct 2026)
+
+- The server keeps no death count. It does build a `keen::PlayerDeath` telemetry event for every
+  death (descriptor 0x140da4db0 in build 26083076, 48 bytes, type hash 0x0b320dc1666d5653) and
+  hands it to `track(PlayerDeath)`, FUN_14004ee70 (25988414: FUN_14004dfc0), as r8. Whether
+  telemetry is on is checked inside that function, after its entry, so an entry hook sees every
+  death either way.
+- Layout: +0x00 u64 accountIdHash, +0x08 u32 userId, +0x0C u8 cause (`keen::DeathCause`:
+  0 Impact, 1 FallDamage, 2 Fog, 3 Suffocated), +0x10 float x, y (height), z in metres,
+  +0x1C Guid causeGuid (Impact only: the damage source), +0x2C u8 wasDeadlyFog, +0x2D u8 drowned.
+- Four callers, one per cause, each builds the event on the stack and calls the function:
+  suffocation (drowned = 1), fall damage, shroud (wasDeadlyFog = FogType is Death) and impact.
+- Hook site: the function start up to its first call, frame sizes wildcarded
+  (`48 89 5C 24 20 55 56 57 41 54 41 55 48 8D AC 24 ?? ?? ?? ?? 48 81 EC ?? ?? ?? ??
+  48 8D 5A 18 48 8B F1 48 8B CB 4D 8B E8 4C 8B E2 E8`), one hit in both builds, checked by
+  `B9 53 56 6D 66 E8` (mov ecx, low half of the type hash; call) at +0x1A3.
+- The map finds the player by the account hash at player slot + 0x48, else by the nearest
+  player within 30 m of the death position, and logs both as DEATH lines. Which one matches in
+  practice (and whether userId relates to the slot handle) is settled by the first real deaths.

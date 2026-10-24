@@ -1,5 +1,7 @@
 // Plain assert-based tests for reading player names from a slot's name field (no framework).
 // The fields are built in this process's memory the way the game lays them out.
+#include <windows.h>
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -50,9 +52,13 @@ static std::string read_100(uintptr_t field) {
 
 int main() {
     // Bug report 1156280: a 9-byte name in a 16-byte buffer (length 9, capacity 16, as in the
-    // reporter's SLOT dump), the rest of the buffer and what follows it leftover bytes.
-    char buffer[64];
-    std::memset(buffer, 0x01, sizeof buffer);
+    // reporter's SLOT dump), the rest of the buffer and what follows it leftover bytes. The text
+    // sits on its own 64 KB-aligned page: the pointer's low byte is 0, so 1.0.0 takes the pointer
+    // path as it did on the server (a stack buffer made the result depend on its random address).
+    auto buffer = static_cast<char*>(VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    EXPECT(buffer != nullptr);
+    if (buffer == nullptr) return 1;
+    std::memset(buffer, 0x01, 64);
     std::memcpy(buffer, "Headshoot", 9);
     std::memcpy(buffer + 9, "\x10\x7f\x02\xa5\x00\x03\x1b", 7);
     Field reported{buffer, 9, 16};

@@ -182,8 +182,17 @@ DWORD WINAPI start(LPVOID) {
     if (config.bases) livemap::world::install_bases(targets);
     else livemap::log("Flame Altars off in livemap.ini (Bases=0)");
     if (config.chat_probe) livemap::world::enable_chat_probe(targets);
-    const std::wstring finds_path = dir + L"\\livemap\\finds.json";
     std::string text;
+    const std::wstring deaths_path = dir + L"\\livemap\\deaths.json";
+    if (config.deaths) {
+        livemap::world::install_deaths(targets);
+        if (read_file(deaths_path, text) && livemap::world::deaths_store().from_json(text)) {
+            livemap::log("deaths: %zu players loaded", livemap::world::deaths_store().players());
+        }
+    } else {
+        livemap::log("death counts off in livemap.ini (Deaths=0)");
+    }
+    const std::wstring finds_path = dir + L"\\livemap\\finds.json";
     if (read_file(finds_path, text)) {
         if (livemap::world::store().from_json(text)) {
             livemap::log("finds: %zu ore deposits, %zu chests loaded", livemap::world::store().deposits(),
@@ -205,6 +214,7 @@ DWORD WINAPI start(LPVOID) {
         livemap::log("discovered places and explored area off in livemap.ini (Discovered=0)");
     }
     uint64_t discovered_saved = livemap::world::discovered_store().version();
+    uint64_t deaths_saved = livemap::world::deaths_store().version();
     uint64_t explored_saved = livemap::world::explored_store().version();
     uint64_t last_discovered = 0, last_explored = 0, last_explored_save = 0;
     uint64_t saved_version = livemap::world::store().version();
@@ -229,6 +239,11 @@ DWORD WINAPI start(LPVOID) {
             uint64_t version = livemap::world::store().version();
             if (write_file_atomic(finds_path, livemap::world::store().to_json())) saved_version = version;
             else livemap::log("finds: could not write livemap\\finds.json (error %lu), will retry", GetLastError());
+        }
+        // Deaths: saved on the next pass after one was counted.
+        if (config.deaths && livemap::world::deaths_store().version() != deaths_saved) {
+            const uint64_t version = livemap::world::deaths_store().version();
+            if (write_file_atomic(deaths_path, livemap::world::deaths_store().to_json())) deaths_saved = version;
         }
         // Discovered places: read every 5 s, saved the same way when they changed.
         if (config.discovered && now - last_discovered >= 5'000) {

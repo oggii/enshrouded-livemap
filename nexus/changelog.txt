@@ -6,6 +6,9 @@
 - Every player online gets a colour of their own, up to the game's 16 players.
 - Player names: read exactly as the game stores them (the cause of "Player 3/4" in 1.0.0 is
   covered by a test now); a name that comes after the player is logged as NAME.
+- Death counter: each player's deaths show next to their name in Players online (hover for
+  killed, fell, shroud or drowned, and when). The server reports every death; the map counts
+  them and keeps them across restarts (livemap/deaths.json). Deaths=0 in livemap.ini turns it off.
 
 1.7.0
 - The page now wears the game's own map-screen look: the gold frame, separators and player arrow

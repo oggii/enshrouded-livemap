@@ -39,6 +39,7 @@ int wmain(int argc, wchar_t** argv) {
         {"chest", t.chest, is_new ? 0xa1afa : 0xa0c4a},
         {"bases", t.bases, is_new ? 0xea090 : 0xe91e0},
         {"chat_post", t.chat_post, is_new ? 0x90b330 : 0x908ce0},
+        {"player_death", t.player_death, is_new ? 0x4ee70 : 0x4dfc0},
     };
     bool ok = true;
     for (const auto& s : sites) {

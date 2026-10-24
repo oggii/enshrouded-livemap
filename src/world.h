@@ -6,6 +6,7 @@
 #include <string>
 
 #include "bases.h"
+#include "deaths.h"
 #include "discovered.h"
 #include "explored.h"
 #include "finds.h"
@@ -47,6 +48,10 @@ void install_chest(const Targets& targets);
 bases::Store& bases_store();
 // Installs the optional bases hooks (no-op when the sites were not found).
 void install_bases(const Targets& targets);
+// Player deaths per name (the death hook counts them); main.cpp saves them, web.cpp serves them.
+deaths::Store& deaths_store();
+// Installs the optional death hook (no-op when the site was not found).
+void install_deaths(const Targets& targets);
 // Research switch: after a player joins, post one chat line per message type 0..7.
 void enable_chat_probe(const Targets& targets);
 

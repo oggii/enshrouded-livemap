@@ -67,6 +67,15 @@ constexpr const char* kJoinLine =
     "4c 89 85 ?? ?? ?? ?? 41 b9 ?? ?? ?? ?? 41 b8 ?? ?? ?? ?? c6 85 ?? ?? ?? ?? 00 45 0f 44 c1 "
     "4c 89 a5 ?? ?? ?? ?? 4c 8d 8d ?? ?? ?? ?? 4c 89 4c 24 40 4c 8d 8d ?? ?? ?? ?? 48 89 4c 24 38 "
     "48 8d 8d ?? ?? ?? ?? 89 54 24 30 48 8b 56 60 89 44 24 28 44 89 44 24 20 41 b0 04";
+// track(PlayerDeath), FUN_14004ee70 / FUN_14004dfc0: the function start up to its first call (frame
+// sizes wildcarded). Checked by "mov ecx, 0x666d5653; call" (the low half of PlayerDeath's type
+// hash) at +0x1a3 in both builds.
+constexpr const char* kPlayerDeath =
+    "48 89 5c 24 20 55 56 57 41 54 41 55 48 8d ac 24 ?? ?? ?? ?? 48 81 ec ?? ?? ?? ?? "
+    "48 8d 5a 18 48 8b f1 48 8b cb 4d 8b e8 4c 8b e2 e8";
+constexpr uint8_t kPlayerDeathCheck[] = {0xb9, 0x53, 0x56, 0x6d, 0x66, 0xe8};
+constexpr size_t kPlayerDeathCheckOffset = 0x1a3;
+
 constexpr size_t kJoinTagOffset = 0x29;
 constexpr size_t kJoinCallOffset = 0x78;
 constexpr size_t kJoinAfterOffset = 0x7d;
@@ -174,6 +183,11 @@ bool find_targets(const uint8_t* base, Targets& out, std::string& error) {
     out.chest = find_unique(code, size, Pattern{"chest", kChest, 0xb}, count);
     out.chat_post = find_unique(code, size, Pattern{"chat_post", kChatPost, 0}, count);
     out.bases = find_unique(code, size, Pattern{"bases", kBasesLoop, 0}, count);
+    std::vector<uintptr_t> deaths = find_all(code, size, parse(kPlayerDeath));
+    if (deaths.size() == 1 && deaths[0] + kPlayerDeathCheckOffset + sizeof kPlayerDeathCheck <= reinterpret_cast<uintptr_t>(code + size) &&
+        std::memcmp(reinterpret_cast<const void*>(deaths[0] + kPlayerDeathCheckOffset), kPlayerDeathCheck, sizeof kPlayerDeathCheck) == 0) {
+        out.player_death = deaths[0];
+    }
     return true;
 }
 

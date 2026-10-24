@@ -53,6 +53,9 @@
   #players li { display: flex; align-items: baseline; gap: 9px; padding: 3px 0; cursor: pointer; font-size: 16px; }
   #players li .dot { width: 9px; height: 9px; flex: none; transform: rotate(45deg) translateY(-1px); box-shadow: 0 0 7px rgba(0, 0, 0, 0.6); }
   #players li .coords { color: var(--muted); font-size: 13px; font-variant-numeric: lining-nums tabular-nums; }
+  #players li .deaths { color: #e3a08c; font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+  #players li .deaths:empty { display: none; }
+  #players li .deaths b { font: 400 15px "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", sans-serif; margin-right: 3px; }
   #players li .follow { display: none; margin-left: auto; font: 700 11px var(--caps); letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
   #players li.following .name { color: var(--gold-bright); }
   #players li.following .follow { display: inline; }
@@ -1146,6 +1149,25 @@
     }).catch(() => {}).finally(() => { discFetching = false; });
   }
 
+  // Deaths per player (counted by the server since the map was installed): "☠ 3" after the name.
+  let deathsData = null, deathsVersion = -1, deathsFetching = false;
+  function maybeRefreshDeaths(version) {
+    if (version === undefined || version === deathsVersion || deathsFetching) return;
+    deathsFetching = true;
+    fetch("deaths" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) { deathsData = d; deathsVersion = d.version; if (lastState) render(lastState); }
+    }).catch(() => {}).finally(() => { deathsFetching = false; });
+  }
+  const DEATH_CAUSES = ["killed", "fell", "shroud", "drowned"];
+  function deathsOf(name) {
+    const d = deathsData && deathsData.players && deathsData.players[name];
+    if (!d || !d.count) return null;
+    const parts = (d.causes || []).map((n, i) => n ? n + " " + DEATH_CAUSES[i] : null).filter(Boolean);
+    const ago = d.at ? Math.max(0, Math.round((Date.now() / 1000 - d.at) / 60)) : null;
+    const when = ago === null ? "" : " · last " + (ago < 1 ? "just now" : ago < 90 ? ago + " min ago" : ago < 2160 ? Math.round(ago / 60) + " h ago" : Math.round(ago / 1440) + " days ago");
+    return { count: d.count, title: d.count + (d.count === 1 ? " death" : " deaths") + (parts.length ? ": " + parts.join(", ") : "") + when };
+  }
+
   let basesFetching = false;
   function maybeRefreshBases(version) {
     if (version === undefined || version === basesVersion || basesFetching || !rawPoiData) return;
@@ -1606,6 +1628,7 @@
     }
   });
   searchList.addEventListener("mousedown", e => { const li = e.target.closest("li"); if (li) { e.preventDefault(); goTo(searchHits[+li.dataset.i]); } });
+  window.livemap.deaths = { of: deathsOf, data: () => deathsData };
   window.livemap.search = { find: text => { searchBox.value = text; runSearch(); return searchHits.map(h => h.name + " · " + h.kind); },
     go: () => searchHits.length && goTo(searchHits[searchPick]), placesDrawn: () => (poiLayer._placeBoxes || []).length, placeBoxes: () => poiLayer._placeBoxes || [] };
 
@@ -1737,6 +1760,7 @@
     lastState = state;
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
+    maybeRefreshDeaths(state.deathsVersion);
     maybeRefreshDiscovered(state.discoveredVersion);
     maybeRefreshExplored(state.exploredVersion);
     let revealed = false;
@@ -1776,15 +1800,23 @@
       let row = playerRows.get(p.entity);
       if (!row) {
         const li = document.createElement("li");
-        li.innerHTML = '<span class="dot"></span><span class="name"></span><span class="coords"></span><span class="follow">following</span>';
+        li.innerHTML = '<span class="dot"></span><span class="name"></span><span class="deaths"></span><span class="coords"></span><span class="follow">following</span>';
         li.title = "Click to follow, click again to stop";
         li.querySelector(".dot").style.background = color;
         list.appendChild(li);
-        row = { li, name: "", coords: "" };
+        row = { li, name: "", coords: "", deaths: "" };
         playerRows.set(p.entity, row);
       }
       if (row.name !== name) { row.li.querySelector(".name").textContent = name; row.name = name; }
       if (row.coords !== coords) { row.li.querySelector(".coords").textContent = coords; row.coords = coords; }
+      const dead = deathsOf(name), deathsKey = dead ? dead.count + "|" + dead.title : "";
+      if (row.deaths !== deathsKey) {
+        const el = row.li.querySelector(".deaths");
+        el.innerHTML = dead ? '<b aria-hidden="true">\u2620\ufe0e</b>' + dead.count : "";
+        el.title = dead ? dead.title : "";
+        if (dead) el.setAttribute("aria-label", dead.title); else el.removeAttribute("aria-label");
+        row.deaths = deathsKey;
+      }
       if (!p.pos) continue;
       const ll = toLatLng(p.pos);
       row.li.onclick = () => {

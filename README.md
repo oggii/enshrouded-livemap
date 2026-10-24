@@ -107,6 +107,7 @@ stops the IP lookup entirely.
 | `Finds` | `1` | Ore deposits and opened chests on the map. |
 | `Bases` | `1` | The players' Flame Altars on the map. |
 | `Discovered` | `1` | Which places each player discovered and where they have been (filter and fog of war). |
+| `Deaths` | `1` | Count each player's deaths (shown next to the name, saved in `livemap/deaths.json`). |
 | `Log`, `LogDiagnostics` | `1` | Log file and periodic diagnostics. |
 
 ## The map
@@ -137,6 +138,10 @@ data, `tools/extract_shroud.py`; the Flame level is the first keyword of the ser
 
 Click a player in the list to follow them (click again or drag the map to stop). Add
 `&follow=<name>` to the link to follow that player whenever they are online.
+
+Each player's deaths since the map was installed show next to their name (☠ 3); hover it for
+how (killed, fell, shroud, drowned) and when the last one was. The server reports every death
+with its cause; the map counts them and keeps the count across restarts.
 
 ### Optional: HD map style
 
