@@ -2,7 +2,8 @@
 // the game's logo, "LIVE MAP" in the page's type and the game's gold frame. Needs the HD tiles
 // (local-maps/tiles-hd, only the maintainer has them).
 //   node tools/perf/promo_banner.mjs <out dir> <logo.png> [version]
-// Writes banner.jpg (1300 x 372, Nexus header), banner-1600x400.jpg and cover.jpg (1920 x 1080).
+// Writes banner.jpg (1300 x 372, Nexus header), banner-1600x400.jpg and cover.jpg (1920 x 1080,
+// Nexus thumbnail). Without a version the pictures name none, so they do not go stale.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import http from "node:http";
@@ -13,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "../..");
 const web = path.join(repo, "web");
-const [outDir, logoFile, version = "1.7"] = process.argv.slice(2);
+const [outDir, logoFile, version = ""] = process.argv.slice(2);
 fs.mkdirSync(outDir, { recursive: true });
 const state = JSON.stringify({ time: { raw: 52e12, dayStart: 216e11, dayEnd: 792e11, isDay: true, ageMs: 10 }, players: [], weather: null, findsVersion: 0, basesVersion: 0 });
 const types = { ".html": "text/html", ".json": "application/json", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".txt": "text/plain" };
@@ -64,7 +65,7 @@ async function compose(name, w, h, scale, png, layout) {
   await page.setContent(`<!doctype html><html><head><style>
     @font-face { font-family: Alegreya; src: url("${base}/fonts/alegreya-latin.woff2") format("woff2"); font-weight: 400 900; }
     html, body { margin: 0; width: ${w}px; height: ${h}px; overflow: hidden; background: #120f18; font-family: Alegreya, Georgia, serif; }
-    .map { position: absolute; inset: 0; width: ${w}px; height: ${h}px; }
+    .map { position: absolute; top: 0; left: ${layout.shift || 0}px; width: ${w}px; height: ${h}px; }
     .shade { position: absolute; inset: 0; background:
       linear-gradient(90deg, rgba(12, 9, 18, 0.96) 0%, rgba(12, 9, 18, 0.88) ${layout.fade[0]}%, rgba(12, 9, 18, 0) ${layout.fade[1]}%),
       ${layout.rfade ? `linear-gradient(270deg, rgba(12, 9, 18, 0.97) 0%, rgba(12, 9, 18, 0.9) ${layout.rfade[0]}%, rgba(12, 9, 18, 0) ${layout.rfade[1]}%),` : ""}
@@ -88,7 +89,7 @@ async function compose(name, w, h, scale, png, layout) {
       <div class="rule"></div>
       <div class="tag">${layout.tagline}</div>
       ${layout.features ? `<div class="small">${layout.features}</div>` : ""}
-      <div class="small">Server-side mod · version ${version}</div>
+      <div class="small">${layout.footer}${version ? " · version " + version : ""}</div>
     </div>
     <div class="frame"></div>
   </body></html>`);
@@ -99,17 +100,19 @@ async function compose(name, w, h, scale, png, layout) {
 }
 
 // Banners: the island on the right of a wide strip, the text on the sea to its left.
-for (const [name, w, h] of [["banner.jpg", 1300, 372], ["banner-1600x400.jpg", 1600, 400]]) {
-  const png = await backdrop(w, h, 2, [w === 1300 ? 3550 : 3000, 4700, -3]);
+for (const [name, w, h] of process.env.COVER_ONLY ? [] : [["banner.jpg", 1300, 372], ["banner-1600x400.jpg", 1600, 400]]) {
+  const png = await backdrop(w, h, 2, [w === 1300 ? 3800 : 3000, 4700, -3]);
   await compose(name, w, h, 1, png, { fade: [24, 46], rfade: w === 1600 ? [5, 12] : null, inset: 8, border: 14, left: 54, logo: w === 1300 ? 250 : 280, title: w === 1300 ? 56 : 62,
-    gap: 6, rule: 300, tag: 19, small: 11, tagline: "The game's own map, live in your browser" });
+    gap: 6, rule: 300, tag: 19, small: 11, tagline: "The game's own map, live in your browser", footer: "Server-side mod · players install nothing" });
 }
-// Cover: the whole island on the right, a bigger title and what the map shows.
+// Cover (the Nexus thumbnail, shown down to about 320 x 180): the whole island on the right, the
+// logo and a big title on dark ground to its left, so both still read in a small tile. Leaflet
+// keeps the world's edge in view, so the picture itself moves right (shift) and the edge fades out.
 {
-  const png = await backdrop(1920, 1080, 1, [2750, 5150, -3.05]);   // the world ends right of the island: faded out too
-  await compose("cover.jpg", 1920, 1080, 1, png, { fade: [30, 52], rfade: [12, 24], inset: 16, border: 22, left: 120, logo: 520, title: 120, gap: 16, rule: 560,
-    tag: 38, small: 17, tagline: "The game's own map, live in your browser.<br>Players install nothing.",
-    features: "Players live · Region names · Fog of war · Deadly shroud · Ore and loot map" });
+  const png = await backdrop(1920, 1080, 1, [1100, 5150, -3.2]);   // the world ends right of the island: faded out too
+  await compose("cover.jpg", 1920, 1080, 1, png, { shift: 260, fade: [36, 56], rfade: [8, 13], inset: 16, border: 22, left: 110, logo: 560, title: 150, gap: 16, rule: 640,
+    tag: 40, small: 17, tagline: "The game's own map, live in your browser.<br>Players install nothing.",
+    features: "Players live · Region names · Fog of war · Deadly shroud · Ore and loot map", footer: "Server-side mod for dedicated servers" });
 }
 console.log("wrote banner.jpg, banner-1600x400.jpg, cover.jpg to", outDir);
 await browser.close();
