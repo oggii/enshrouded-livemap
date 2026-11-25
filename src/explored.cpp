@@ -65,11 +65,11 @@ bool unbase64(const std::string& t, std::vector<uint8_t>& out) {
 }
 
 bool Store::reveal(const std::string& name, double x, double z) {
-    if (!(x >= -kRadiusMetres && x <= kCells * kCellMetres + kRadiusMetres && z >= -kRadiusMetres &&
-          z <= kCells * kCellMetres + kRadiusMetres)) {
+    if (!(x >= -radius_ && x <= kCells * kCellMetres + radius_ && z >= -radius_ &&
+          z <= kCells * kCellMetres + radius_)) {
         return false;
     }
-    const int r = static_cast<int>(std::ceil(kRadiusMetres / kCellMetres));
+    const int r = static_cast<int>(std::ceil(radius_ / kCellMetres));
     const int cx = static_cast<int>(std::floor(x / kCellMetres)), cz = static_cast<int>(std::floor(z / kCellMetres));
     std::lock_guard lock(mutex_);
     std::vector<uint8_t>& g = grids_[name];
@@ -83,7 +83,7 @@ bool Store::reveal(const std::string& name, double x, double z) {
             const int col = cx + dx;
             if (col < 0 || col >= kCells) continue;
             const double mx = (col + 0.5) * kCellMetres - x;
-            if (mx * mx + mz * mz > kRadiusMetres * kRadiusMetres) continue;
+            if (mx * mx + mz * mz > radius_ * radius_) continue;
             const size_t bit = static_cast<size_t>(row) * kCells + col;
             const uint8_t mask = static_cast<uint8_t>(1u << (bit & 7));
             if (!(g[bit >> 3] & mask)) {

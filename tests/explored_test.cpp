@@ -52,6 +52,21 @@ int main() {
     Store u;
     EXPECT(!u.from_json("{\"cells\":256,\"players\":{}}"));
     EXPECT(!u.from_json("garbage"));
+    // Explore mode's near grid: the same 20 m cells, marked within 50 m. Around a cell centre
+    // that is the 5 x 5 block without its 4 corners = 21 cells.
+    Store n(kNearMetres);
+    EXPECT(n.reveal("A", 5010, 5010));
+    EXPECT(n.explored("A", 5010, 5010));
+    EXPECT(n.explored("A", 5050, 5010));                // cell centre 40 m away
+    EXPECT(!n.explored("A", 5070, 5010));               // 60 m
+    EXPECT(!n.explored("A", 5050, 5050));               // corner, 56.6 m
+    int near_cells = 0;
+    for (int row = 0; row < kCells; ++row)
+        for (int col = 0; col < kCells; ++col)
+            near_cells += n.explored("A", (col + 0.5) * kCellMetres, (row + 0.5) * kCellMetres);
+    EXPECT(near_cells == 21);
+    Store m(kNearMetres);
+    EXPECT(m.from_json(n.to_json()) && m.explored("A", 5010, 5010) && !m.explored("A", 5070, 5010));
     if (failures == 0) std::printf("explored: all passed (one reveal = %d cells)\n", cells);
     return failures == 0 ? 0 : 1;
 }
