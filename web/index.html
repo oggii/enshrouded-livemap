@@ -73,6 +73,7 @@
     font: 500 14px var(--serif); padding: 3px 6px; max-width: 100%; }
   #pois select:focus-visible, #pois button:focus-visible, #poiToggle:focus-visible { outline: 1px solid var(--gold-bright); outline-offset: 2px; }
   #pois .disc-note { color: var(--muted); font-size: 13px; width: 100%; line-height: 1.3; }
+  body.explore-mode #fogSwitch, body.explore-mode #discMode { display: none; }
   #pois input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 11px; height: 11px; margin: 0 5px 0 3px; flex: none;
     transform: rotate(45deg); border: 1px solid var(--gold-dim); background: rgba(0, 0, 0, 0.3); cursor: pointer;
     transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out; }
@@ -708,7 +709,7 @@
       const z = this._map.getZoom(), alpha = Math.max(0, Math.min(1, (z + 2.6) / 0.7));
       if (alpha <= 0) return;
       const size = Math.round(Math.max(10, Math.min(15, 13 + z * 1.5)));
-      const filter = discMode !== "all" && EXP && discNames().length;
+      const filter = EXPLORE || (discMode !== "all" && EXP && discNames().length);
       ctx.save();
       ctx.globalAlpha = alpha * 0.95;
       ctx.font = "600 " + size + "px Alegreya, Georgia, serif";
@@ -747,6 +748,7 @@
       // Under the spire icon, or above it when that would run into a name already drawn.
       const placed = [], hits = (l, t, r, b) => placed.some(q => l < q[2] && r > q[0] && t < q[3] && b > q[1]);
       for (const [name, wx, wz] of rawPoiData.regions) {
+        if (EXPLORE && !exploredAt(wx, wz)) continue;
         const x = ox + wx * sx, sy0 = oy + wz * sy;
         if (x < X0 - 300 || x > W + 300 || sy0 < Y0 - 50 || sy0 > H + 50) continue;
         const t = name.toUpperCase(), half = ctx.measureText(t).width / 2 + 6;
@@ -1010,7 +1012,7 @@
     const sb = sh.querySelector("input");
     sb.checked = showShroud;
     sb.onchange = () => { setShroudShown(sb.checked); };
-    const fg = document.createElement("label");
+    const fg = document.createElement("label"); fg.id = "fogSwitch";
     fg.innerHTML = '<input type="checkbox" data-extra="1"><span class="sw" style="background:#2a2236;border:1px solid #6a5a80"></span><span class="t">Fog of war (by the player chosen below)</span>';
     const fb = fg.querySelector("input");
     fb.checked = showFog;
@@ -1104,10 +1106,16 @@
   let DISC = null, discVersion = -1, discFetching = false;
   let discMode = (() => { try { return localStorage.getItem("livemap.discMode") || "all"; } catch { return "all"; } })();
   let discBy = (() => { try { return localStorage.getItem("livemap.discBy") || ""; } catch { return ""; } })();
+  // Explore mode (ExploreMode=1 in livemap.ini, "exploreMode" in /state): the server owner shows
+  // only what the players found. Fog on and opaque, the filter fixed to "Discovered", small
+  // markers only within 50 m of where a player has been (the near grid, /near).
+  let EXPLORE = false;
+  let NEAR = null, nearVersion = -1, nearFetching = false, nearLast = 0, nearGrid = null, nearWarned = false;
+  const NEAR_RADIUS = 50;
   // The chosen players and their combined explored grid are cached; discInvalidate() after new
   // data or another choice (the marker loop asks for every point on every redraw).
   let discNamesCache = null;
-  function discInvalidate() { discNamesCache = null; expGrid = null; }
+  function discInvalidate() { discNamesCache = null; expGrid = null; nearGrid = null; }
   function discNames() {
     if (discNamesCache) return discNamesCache;
     const all = new Set([...Object.keys(DISC ? DISC.players : {}), ...Object.keys(EXP ? EXP.players : {})]);
@@ -1123,9 +1131,30 @@
     return EXP ? exploredAt(p[1], p[3]) : null;
   }
   function discHidden(p) {
+    if (EXPLORE) return exploreKnown(p) === false;
     if (discMode === "all" || !discNames().length) return false;
     const known = discKnown(p);
     return known === null ? false : discMode === "known" ? !known : known;
+  }
+  // Explore mode: finds and altars always (players made them); keyed places once a chosen player
+  // discovered them in the game; everything else once a player was within 50 m.
+  function exploreKnown(p) {
+    if (p.isFind || (p[5] && p[5].base)) return null;
+    if (p.k !== undefined) return !!DISC && discNames().some(n => DISC.players[n] && DISC.players[n].keys.has(p.k));
+    return nearAt(p[1], p[3]);
+  }
+  function nearAt(x, z) {
+    if (!NEAR) return false;
+    if (!nearGrid) {
+      const n = NEAR.cells, g = new Uint8Array(n * n);
+      for (const name of discNames()) {
+        const bits = NEAR.players[name];
+        if (bits) for (let i = 0; i < n * n; i++) if (bits[i >> 3] >> (i & 7) & 1) g[i] = 1;
+      }
+      nearGrid = { n, cell: NEAR.cellMetres, g };
+    }
+    const { n, cell, g } = nearGrid, col = Math.floor(x / cell), row = Math.floor(z / cell);
+    return col >= 0 && row >= 0 && col < n && row < n && g[row * n + col] === 1;
   }
   function discText(p) {
     if (!DISC || p.k === undefined || !Object.keys(DISC.players).length) return "";
@@ -1141,7 +1170,8 @@
       '<option value="' + n.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + '">by ' + n.replace(/&/g, "&amp;").replace(/</g, "&lt;")
       + (online(n) ? "" : " (offline)") + "</option>")).join("");
     if (bySel.innerHTML !== want) { bySel.innerHTML = want; bySel.value = names.includes(discBy) ? discBy : ""; }
-    note.textContent = !DISC && !EXP ? "Needs the server part 1.6." : !names.length ? "Nobody has played since the update."
+    note.textContent = EXPLORE ? "Explore mode: this server shows only what your group has found."
+      : !DISC && !EXP ? "Needs the server part 1.6." : !names.length ? "Nobody has played since the update."
       : "Towns, dungeons, camps ... use the game's own state; everything else counts within 300 m of where that player has been.";
     document.getElementById("discMode").disabled = !names.length;
     bySel.disabled = !names.length;
@@ -1181,16 +1211,10 @@
     const col = Math.floor(x / cell), row = Math.floor(z / cell);
     return col >= 0 && row >= 0 && col < n && row < n && g[row * n + col] === 1;
   }
-  // The server marks the area once a second and the page fetches it every 15 s. In between the
-  // page marks the same 300 m circle around every player it sees, so the fog and the markers
-  // follow the player at once. True when a cell was new.
-  function revealLive(name, x, z) {
-    if (!EXP || !name) return false;
-    const n = EXP.cells, cell = EXP.cellMetres;
-    let bits = EXP.players[name];
-    if (!bits) { bits = EXP.players[name] = new Uint8Array(n * n / 8); discInvalidate(); discPanel(); }
-    const g = expGrid && discNames().includes(name) ? expGrid.g : null;
-    const r = Math.ceil(EXP_RADIUS / cell), cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+  // Marks every cell whose centre is within `radius` of (x, z) in a player's bits and, when
+  // given, in the combined grid g. True when a cell was new.
+  function markCircle(bits, g, n, cell, x, z, radius) {
+    const r = Math.ceil(radius / cell), cx = Math.floor(x / cell), cz = Math.floor(z / cell);
     let changed = false;
     for (let dz = -r; dz <= r; dz++) {
       const row = cz + dz;
@@ -1198,13 +1222,41 @@
       const mz = (row + 0.5) * cell - z;
       for (let dx = -r; dx <= r; dx++) {
         const col = cx + dx, mx = (col + 0.5) * cell - x, i = row * n + col;
-        if (col < 0 || col >= n || mx * mx + mz * mz > EXP_RADIUS * EXP_RADIUS || bits[i >> 3] >> (i & 7) & 1) continue;
+        if (col < 0 || col >= n || mx * mx + mz * mz > radius * radius || bits[i >> 3] >> (i & 7) & 1) continue;
         bits[i >> 3] |= 1 << (i & 7);
         if (g) g[i] = 1;
         changed = true;
       }
     }
     return changed;
+  }
+  // The server marks the area once a second and the page fetches it every 15 s. In between the
+  // page marks the same 300 m circle around every player it sees, so the fog and the markers
+  // follow the player at once. True when a cell was new.
+  function revealLive(name, x, z) {
+    if (!EXP || !name) return false;
+    const n = EXP.cells;
+    let bits = EXP.players[name];
+    if (!bits) { bits = EXP.players[name] = new Uint8Array(n * n / 8); discInvalidate(); discPanel(); }
+    return markCircle(bits, expGrid && discNames().includes(name) ? expGrid.g : null, n, EXP.cellMetres, x, z, EXP_RADIUS);
+  }
+  function revealNearLive(name, x, z) {
+    if (!NEAR || !name) return false;
+    const n = NEAR.cells;
+    let bits = NEAR.players[name];
+    if (!bits) { bits = NEAR.players[name] = new Uint8Array(n * n / 8); nearGrid = null; }
+    return markCircle(bits, nearGrid && discNames().includes(name) ? nearGrid.g : null, n, NEAR.cellMetres, x, z, NEAR_RADIUS);
+  }
+  // /explored and /near: {version, cells, cellMetres, players: {name: base64 bits}}. Bits the page
+  // marked live are kept until the server has them too.
+  function mergeGrid(d, old) {
+    const players = old && old.cells === d.cells ? old.players : {};
+    for (const [name, b64] of Object.entries(d.players || {})) {
+      const s = atob(b64), bits = new Uint8Array(s.length), prev = players[name];
+      for (let i = 0; i < s.length; i++) bits[i] = s.charCodeAt(i) | (prev && prev.length === s.length ? prev[i] : 0);
+      players[name] = bits;
+    }
+    return { cells: d.cells, cellMetres: d.cellMetres, players };
   }
   function maybeRefreshExplored(version) {
     const now = Date.now();
@@ -1213,19 +1265,41 @@
     expLast = now;
     fetch("explored" + q).then(r => r.ok ? r.json() : null).then(d => {
       if (!d) return;
-      const players = EXP && EXP.cells === d.cells ? EXP.players : {};
-      for (const [name, b64] of Object.entries(d.players || {})) {
-        const s = atob(b64), bits = new Uint8Array(s.length), old = players[name];
-        for (let i = 0; i < s.length; i++) bits[i] = s.charCodeAt(i) | (old && old.length === s.length ? old[i] : 0);
-        players[name] = bits;
-      }
-      EXP = { cells: d.cells, cellMetres: d.cellMetres, players };
+      EXP = mergeGrid(d, EXP);
       expVersion = d.version;
       discInvalidate();
       discPanel();
       drawFog();
       poiLayer.invalidate();
     }).catch(() => {}).finally(() => { expFetching = false; });
+  }
+  function maybeRefreshNear(version) {
+    const now = Date.now();
+    if (!EXPLORE || version === undefined || version === nearVersion || nearFetching || now - nearLast < 15000) return;
+    nearFetching = true;
+    nearLast = now;
+    const warn = () => { if (!nearWarned) { nearWarned = true; console.warn("livemap: /near not available; small markers stay hidden"); } };
+    fetch("near" + q).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return warn();
+      NEAR = mergeGrid(d, NEAR);
+      nearVersion = d.version;
+      nearGrid = null;
+      poiLayer.invalidate();
+    }).catch(warn).finally(() => { nearFetching = false; });
+  }
+  // Called once, on the first state that says exploreMode. Nothing is written to localStorage, so
+  // the viewer's own choices come back on a server without the mode.
+  function applyExploreMode() {
+    EXPLORE = true;
+    NEAR = NEAR || { cells: 512, cellMetres: 20, players: {} };
+    discMode = "known";
+    document.body.classList.add("explore-mode");
+    showFog = true;
+    fog.cur = null;
+    fogOverlay.addTo(map);
+    drawFog();
+    discPanel();
+    poiLayer.invalidate();
   }
   function maybeRefreshDiscovered(version) {
     if (version === undefined || version === discVersion || discFetching) return;
@@ -1623,7 +1697,7 @@
   // is soft (the grid blurred over about 100 m) and land clears over 0.8 s instead of at once.
   // One canvas pixel per grid cell, stretched over the world by the browser (smoothly); an image
   // overlay that takes a canvas, so Leaflet moves and zooms it like the other overlays.
-  const FOG_ALPHA = 190, FOG_FADE_MS = 800;
+  const FOG_FADE_MS = 800, fogAlphaMax = () => EXPLORE ? 255 : 190;
   map.createPane("fog").style.zIndex = 395;
   map.getPane("fog").style.pointerEvents = "none";
   const CanvasOverlay = L.ImageOverlay.extend({
@@ -1661,12 +1735,12 @@
         }
       }
     }
-    for (let i = 0; i < n * n; i++) a[i] = FOG_ALPHA * (1 - Math.min(1, a[i]));
+    for (let i = 0; i < n * n; i++) a[i] = fogAlphaMax() * (1 - Math.min(1, a[i]));
     return a;
   }
   function fogFrame(now) {
     fog.raf = 0;
-    if (!showFog || (!EXP && !DISC)) return;
+    if (!showFog || (!EXP && !DISC && !EXPLORE)) return;
     if (fog.dirty) {
       fog.dirty = false;
       fog.target = fogTarget();
@@ -1680,7 +1754,7 @@
       }
     }
     const n = fog.canvas.width, cur = fog.cur, target = fog.target, px = fog.img.data;
-    const step = FOG_ALPHA * Math.min(100, now - fog.last) / FOG_FADE_MS;
+    const step = fogAlphaMax() * Math.min(100, now - fog.last) / FOG_FADE_MS;
     fog.last = now;
     let moving = false;
     for (let row = 0; row < n; row++) {
@@ -2022,7 +2096,7 @@
   addEventListener("resize", replaceAll);
   window.livemap.chests = () => [...lootedByPoi.values()].map(c => ({ x: c.x, z: c.z, at: c.at, state: lootState(c) }));
   window.livemap.discovered = { known: i => discKnown(poiData.pois[i]), state: () => DISC, mode: () => discMode,
-    explored: (x, z) => exploredAt(x, z), exp: () => EXP, regions: () => rawPoiData && rawPoiData.regions,
+    explored: (x, z) => exploredAt(x, z), exp: () => EXP, explore: () => EXPLORE, near: (x, z) => nearAt(x, z), regions: () => rawPoiData && rawPoiData.regions,
     fogAlpha(x, z) {
       if (!fog.cur) return null;
       const n = fog.canvas.width, col = Math.floor(x / 10240 * n), row = Math.floor(z / 10240 * n);
@@ -2064,6 +2138,7 @@
   map.on("dragstart", () => { if (follow !== null) { followName = null; setFollow(null); } });
   function render(state) {
     lastState = state;
+    if (state.exploreMode && !EXPLORE) applyExploreMode();
     maybeRefreshFinds(state.findsVersion);
     maybeRefreshBases(state.basesVersion);
     maybeRefreshDeaths(state.deathsVersion);
@@ -2071,9 +2146,14 @@
     maybeRefreshCreatures(state.creaturesVersion);
     maybeRefreshDiscovered(state.discoveredVersion);
     maybeRefreshExplored(state.exploredVersion);
+    maybeRefreshNear(state.nearVersion);
     let revealed = false;
-    for (const p of state.players) if (p.pos && revealLive(p.name, p.pos[0], p.pos[2])) revealed = true;
-    if (revealed) { drawFog(); if (discMode !== "all") poiLayer.schedule(); }
+    for (const p of state.players) {
+      if (!p.pos) continue;
+      if (revealLive(p.name, p.pos[0], p.pos[2])) revealed = true;
+      if (EXPLORE && revealNearLive(p.name, p.pos[0], p.pos[2])) revealed = true;
+    }
+    if (revealed) { drawFog(); if (EXPLORE || discMode !== "all") poiLayer.schedule(); }
     if (document.hidden) return;  // nothing to draw in a background tab; the next message catches up
     weatherLayer.update(state.weather);
     drawShroud();
