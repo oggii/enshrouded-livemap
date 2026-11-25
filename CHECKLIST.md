@@ -1,12 +1,12 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Spec für den Spoiler-Schalter geschrieben, wartet auf deine Durchsicht.
+**Wo wir stehen:** Spec für den Spoiler-Schalter (heisst jetzt ExploreMode, wie in GitHub-Issue #2) wartet auf deine Durchsicht. Dankeszeile in Changelog 1.9.0 und README eingetragen.
 
 ## Wartet auf dich
 
-- Spec durchsehen: docs/superpowers/specs/2026-11-25-no-spoilers-design.md
+- Spec durchsehen: docs/superpowers/specs/2026-11-25-explore-mode-design.md
 
-## 1. Spoiler-Schalter (NoSpoilers=1), Version 1.9.0
+## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
 - [x] Entwurf besprochen (Seite sperrt, kleine Marker ab 50 m)
 - [x] Spec geschrieben
@@ -17,7 +17,7 @@
 - [ ] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
 - [ ] Seitencheck nospoiler_check.mjs
 - [ ] Spieltest auf dem Test-Server
-- [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant und unholyhakisak
+- [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
 - [ ] Live-Server nach OK
 
 ## 2. Spieler in Dungeons am Eingang zeigen

@@ -183,6 +183,12 @@ Made from the real page and map with sample players (`tools/perf/promo_shots.mjs
 | ![Layout](nexus/screens/06-layout.jpg) | ![HD map style](nexus/screens/07-hd-overview.jpg) |
 | Move the panels where you like; a layout for phones | The optional HD map style |
 
+## Thanks
+
+goakiller900, muhammadarifftaha and spruyt-labs-bot kept the map running on the early November
+2026 server builds while I was away (issue #1): patches, a test with real players on Proton, and
+the finding that the entity table had moved, which 1.8.0 reads from the game the same way.
+
 ## Build
 
 `build.cmd` (Visual Studio 2022 Build Tools, CMake, Ninja) builds `build\iphlpapi.dll`, runs the

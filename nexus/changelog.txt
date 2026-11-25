@@ -1,3 +1,8 @@
+1.9.0 (not released yet)
+- Thanks to goakiller900, muhammadarifftaha and spruyt-labs-bot (GitHub issue #1): they kept
+  the map running on the early November builds, and spruyt-labs-bot found that the entity
+  table had moved, the fix that 1.8.0 also uses.
+
 1.8.0
 - Server build 26430253 (the game update of 4 November 2026). Keen moved a few things the map
   reads (the player table, the day clock, the mining code and where the server keeps its

@@ -1,8 +1,9 @@
-# No spoilers: a server switch that hides what nobody has found yet
+# Explore mode: a server switch that hides what nobody has found yet
 
-Design for the first of three features promised on Nexus on 2026-11-25 (order: no spoilers,
+Design for the first of three features promised on Nexus on 2026-11-25 (order: explore mode,
 players in dungeons at the entrance, tiles lit from the top left). Asked for by entrigant
-(comment 178349760) and unholyhakisak (178686288). Decided with the user on 2026-11-25.
+(comment 178349760) and unholyhakisak (178686288) on Nexus and by anthony-spruyt in GitHub issue
+#2, whose name `ExploreMode` the setting takes. Decided with the user on 2026-11-25.
 
 ## Goal
 
@@ -20,10 +21,10 @@ Decisions:
 
 ## 1. Switch
 
-`NoSpoilers=0` in `livemap.ini` (default off), read in `config.cpp` next to `Discovered`.
-- `/state` carries `"noSpoilers":true` when it is on.
+`ExploreMode=0` in `livemap.ini` (default off), read in `config.cpp` next to `Discovered`.
+- `/state` carries `"exploreMode":true` when it is on.
 - With `Discovered=0` the server has no exploration data, so the switch would hide everything.
-  In that case the DLL logs `NoSpoilers needs Discovered=1; no spoilers off` and leaves the
+  In that case the DLL logs `ExploreMode needs Discovered=1; explore mode off` and leaves the
   switch off.
 
 ## 2. Server: the "near" grid
@@ -42,7 +43,7 @@ There is no near data from before the update. Small markers in areas explored ea
 once someone passes by again. The fog and the game's own discovered places are not affected,
 because they come from the existing data.
 
-## 3. Page with `noSpoilers`
+## 3. Page with `exploreMode`
 
 **Fog**
 - Always on and fully opaque over unexplored land, instead of alpha 190.
@@ -69,7 +70,7 @@ because they come from the existing data.
   one".
 
 **Explanation**
-- One line in the marker panel: "No spoilers: this server shows only what your group has found."
+- One line in the marker panel: "Explore mode: this server shows only what your group has found."
 
 Pages from before 1.9.0 ignore the flag. With the switch on, the server therefore needs the new
 page, which the zip includes as always.
@@ -83,14 +84,14 @@ page, which the zip includes as always.
 
 - `tests/explored_test.cpp`: a store with radius 50 marks the cells within 50 m and nothing at
   60 m, and the to_json/from_json round trip still works. The 300 m cases stay unchanged.
-- `tools/perf/nospoiler_check.mjs` (like `fog_check.mjs`, fixtures with a small explored and
+- `tools/perf/explore_check.mjs` (like `fog_check.mjs`, fixtures with a small explored and
   near grid) checks:
   - a chest outside the near grid is missing and one inside it shows;
   - an undiscovered town is missing;
   - the fog is opaque and its checkbox is gone;
   - search finds no hidden marker.
 - The existing page checks pass unchanged with the switch off.
-- Game test on the test server, with `NoSpoilers=1`:
+- Game test on the test server, with `ExploreMode=1`:
   - walk to a chest; it appears within 50 m;
   - an unexplored region stays black.
 
