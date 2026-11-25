@@ -40,6 +40,9 @@ struct Targets {
     // tracker; its four callers (suffocated, fall, shroud, hit) call it on every player death.
     // r8 = the 48-byte event (docs/RESEARCH.md section 20).
     uintptr_t player_death = 0;
+    // Offset of the entity table in the ECS world, read from the game's entity-id helper
+    // (FUN_140653a80: mov rcx, [rax+disp32]); 0x828 up to 26083076, 0x830 in 26430253.
+    uint32_t entity_table = 0;
     const char* build = nullptr;  // label of the recognised server build
 };
 

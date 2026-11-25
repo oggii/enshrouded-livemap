@@ -58,6 +58,9 @@ int wmain(int argc, wchar_t** argv) {
         std::printf("%-13s rva 0x%llx%s\n", s.name, static_cast<unsigned long long>(rva),
                     rva == s.expected ? "" : "  (UNEXPECTED)");
     }
+    const uint32_t table_expected = std::strcmp(t.build, "26430253") == 0 ? 0x830 : 0x828;
+    ok = ok && t.entity_table == table_expected;
+    std::printf("entity_table  world+0x%x%s\n", t.entity_table, t.entity_table == table_expected ? "" : "  (UNEXPECTED)");
     std::printf(ok ? "OK: all hook sites found\n" : "FAIL: a hook site moved\n");
     return ok ? 0 : 1;
 }

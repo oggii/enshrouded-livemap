@@ -721,6 +721,8 @@ void enable_chat_probe(const Targets& t) {
 }
 
 bool install(const Targets& t, std::string& error) {
+    set_entity_table_offset(t.entity_table);
+    log("entity table at world+0x%x", t.entity_table);
     if (create(g_player_table_hook, t.player_table, on_player_table, "player_table", error) &&
         create(g_movement_hook, t.movement, on_movement, "movement", error) &&
         create(g_daytime_hook, t.daytime, on_daytime, "daytime", error) &&

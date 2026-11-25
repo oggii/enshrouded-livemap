@@ -60,6 +60,12 @@ constexpr const char* kMiningRecord =
     "0f b6 d3 e8 ?? ?? ?? ?? 85 c0 74 ?? 33 c9 89 44 24 68 48 89 4c 24 58 48 8d 54 24 58 "
     "48 89 4c 24 60 49 8b cf 89 6c 24 6c e8";
 constexpr size_t kMiningRecordHook = 0x28;
+// The game's entity-id helper (FUN_140653a80 in 25988414): id = [[world+disp32] + (index-1)*16].
+// The disp32 at +0x1c is the entity table's offset in the world.
+constexpr const char* kEntityIdHelper =
+    "8b 41 08 4c 8b c2 85 c0 75 06 89 02 48 8b c2 c3 8d 50 ff 48 8b 01 48 03 d2 48 8b 88 ?? ?? ?? ?? "
+    "8b 04 d1 41 89 00";
+constexpr size_t kEntityTableDisp = 0x1c;
 
 // add_buildzones_server (FUN_1400e90e0 / FUN_1400e9f90): the loop head that copies the transform
 // ("mov rax, [rbp-0x10]" ... "call"), 0x100 bytes after the function start in both builds.
@@ -197,6 +203,19 @@ bool find_targets(const uint8_t* base, Targets& out, std::string& error) {
             return false;
         }
         *m.slot = hits[0] + m.offset;
+    }
+    std::vector<uintptr_t> helper = find_all(code, size, parse(kEntityIdHelper));
+    if (helper.size() != 1) {
+        std::snprintf(buf, sizeof buf, "pattern 'entity_id_helper' matched %zu times (need exactly 1), not hooking",
+                      helper.size());
+        error = buf;
+        return false;
+    }
+    std::memcpy(&out.entity_table, reinterpret_cast<const void*>(helper[0] + kEntityTableDisp), sizeof out.entity_table);
+    if (out.entity_table < 0x100 || out.entity_table > 0x2000) {
+        std::snprintf(buf, sizeof buf, "entity table offset 0x%x looks wrong, not hooking", out.entity_table);
+        error = buf;
+        return false;
     }
     // Optional sites: missing ones leave their feature off, the rest keeps working.
     int count = 0;
