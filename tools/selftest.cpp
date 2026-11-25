@@ -28,19 +28,29 @@ int wmain(int argc, wchar_t** argv) {
         std::printf("INACTIVE: %s\n", error.c_str());
         return 1;
     }
-    const bool is_new = std::strcmp(t.build, "26083076") == 0;
-    std::printf("server build %s\n", t.build);
-    struct { const char* name; uintptr_t at; uintptr_t expected; } sites[] = {
-        {"player_table", t.player_table, is_new ? 0x7b5800 : 0x7b34c0},
-        {"movement", t.movement, is_new ? 0x91d2a : 0x90e7a},
-        {"daytime", t.daytime, is_new ? 0x95f842 : 0x95d1f2},
-        {"registry", t.registry, is_new ? 0x677240 : 0x675e10},
-        {"mining", t.mining, is_new ? 0x2245a8 : 0x2236f8},
-        {"chest", t.chest, is_new ? 0xa1afa : 0xa0c4a},
-        {"bases", t.bases, is_new ? 0xea090 : 0xe91e0},
-        {"chat_post", t.chat_post, is_new ? 0x90b330 : 0x908ce0},
-        {"player_death", t.player_death, is_new ? 0x4ee70 : 0x4dfc0},
+    // Expected RVAs per build: player_table, movement, daytime, registry, mining, chest, bases,
+    // chat_post, player_death.
+    struct Known { const char* build; uintptr_t rva[9]; };
+    constexpr Known kKnown[] = {
+        {"25988414", {0x7b34c0, 0x90e7a, 0x95d1f2, 0x675e10, 0x2236f8, 0xa0c4a, 0xe91e0, 0x908ce0, 0x4dfc0}},
+        {"26083076", {0x7b5800, 0x91d2a, 0x95f842, 0x677240, 0x2245a8, 0xa1afa, 0xea090, 0x90b330, 0x4ee70}},
+        {"26430253", {0x7bed90, 0x9581a, 0x969c62, 0x67e720, 0x22a034, 0xa578a, 0xee3f0, 0x9151f0, 0x52430}},
     };
+    const Known* known = nullptr;
+    for (const Known& k : kKnown) {
+        if (std::strcmp(k.build, t.build) == 0) known = &k;
+    }
+    if (known == nullptr) {
+        std::printf("server build %s: no expected addresses in the selftest\n", t.build);
+        return 1;
+    }
+    std::printf("server build %s%s\n", t.build, t.mining_record ? " (mining via the stack entry)" : "");
+    const char* names[] = {"player_table", "movement", "daytime", "registry", "mining",
+                           "chest", "bases", "chat_post", "player_death"};
+    const uintptr_t found[] = {t.player_table, t.movement, t.daytime, t.registry, t.mining,
+                               t.chest, t.bases, t.chat_post, t.player_death};
+    struct { const char* name; uintptr_t at; uintptr_t expected; } sites[9];
+    for (int i = 0; i < 9; ++i) sites[i] = {names[i], found[i], known->rva[i]};
     bool ok = true;
     for (const auto& s : sites) {
         uintptr_t rva = s.at - reinterpret_cast<uintptr_t>(base);

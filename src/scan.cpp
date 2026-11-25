@@ -22,6 +22,7 @@ struct Build {
 constexpr Build kBuilds[] = {
     {1792148062, 0x1dcf000, "25988414"},  // 16 Oct 2026, Game Version SVN 1269579
     {1792507668, 0x1dd1000, "26083076"},  // 20 Oct 2026, Game Version SVN 1273043
+    {1793791038, 0x1dde000, "26430253"},  // 4 Nov 2026
 };
 
 struct Pattern {
@@ -30,9 +31,10 @@ struct Pattern {
     size_t hook_offset;
 };
 
-constexpr uint8_t kPlayerTable[] = {0x48, 0x8b, 0xc4, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54,
-                                    0x41, 0x56, 0x41, 0x57, 0x48, 0x8d, 0xa8, 0x48, 0xf6,
-                                    0xff, 0xff, 0x48, 0x81, 0xec, 0x80, 0x0a, 0x00, 0x00};
+// Entry of the player table update; the frame sizes are wildcards (they grew by 0x20 in 26430253).
+constexpr const char* kPlayerTable =
+    "48 8b c4 55 53 56 57 41 54 41 56 41 57 48 8d a8 ?? ?? ?? ?? 48 81 ec ?? ?? ?? ?? "
+    "44 0f 29 40 88 48 8b f1 44 0f 29 88 78 ff ff ff";
 constexpr uint8_t kMovement[] = {0x48, 0x01, 0x0a, 0xf3, 0x48, 0x0f, 0x2c, 0xc6, 0xf3, 0x49, 0x0f,
                                  0x2c, 0xc8, 0x48, 0x03, 0xc8, 0x48, 0x01, 0x4a, 0x08, 0xf3, 0x48,
                                  0x0f, 0x2c, 0xcf, 0xf3, 0x48, 0x0f, 0x2c, 0xc6, 0x48, 0x03, 0xc8,
@@ -48,9 +50,16 @@ constexpr uint8_t kChest[] = {0x48, 0x8b, 0x44, 0x24, 0x38, 0x8b, 0x40, 0x24, 0x
 constexpr uint8_t kChatPost[] = {0x40, 0x55, 0x56, 0x41, 0x54, 0x41, 0x55, 0x41, 0x57, 0x48, 0x83, 0xec, 0x30, 0x49,
                                  0x8b, 0x41, 0x08, 0x33, 0xed, 0x4d, 0x8b, 0xf9, 0x45, 0x0f, 0xb6, 0xe0, 0x48, 0x8b,
                                  0xf2, 0x4c, 0x8b, 0xe9, 0x48, 0x3d, 0x00, 0x04, 0x00, 0x00, 0x76, 0x16};
-constexpr uint8_t kDaytime[] = {0x8b, 0xcf, 0xe8, 0x09, 0xe2, 0xfc, 0xff, 0x48, 0x8b, 0xd0,
-                                0x48, 0x8b, 0xcf, 0xe8, 0x5e, 0x8b, 0xfc, 0xff, 0x48, 0x89,
-                                0x47, 0x48, 0x49, 0x3b, 0x07, 0x7c, 0x09, 0x49};
+// The daytime store "mov [rdi+0x48], rax" at +0x12; the two call targets are wildcards.
+constexpr const char* kDaytime =
+    "8b cf e8 ?? ?? ?? ?? 48 8b d0 48 8b cf e8 ?? ?? ?? ?? 48 89 47 48 49 3b 07 7c 09 49";
+// 26430253 builds the loot entry {0, 0, item, amount} on the stack and pushes it with a helper:
+// item = eax stored to [rsp+0x68], amount = ebp stored to [rsp+0x6c]; the hook sits on the push
+// call at +0x28, where both are in memory.
+constexpr const char* kMiningRecord =
+    "0f b6 d3 e8 ?? ?? ?? ?? 85 c0 74 ?? 33 c9 89 44 24 68 48 89 4c 24 58 48 8d 54 24 58 "
+    "48 89 4c 24 60 49 8b cf 89 6c 24 6c e8";
+constexpr size_t kMiningRecordHook = 0x28;
 
 // add_buildzones_server (FUN_1400e90e0 / FUN_1400e9f90): the loop head that copies the transform
 // ("mov rax, [rbp-0x10]" ... "call"), 0x100 bytes after the function start in both builds.
@@ -160,12 +169,10 @@ bool find_targets(const uint8_t* base, Targets& out, std::string& error) {
     const uint8_t* code = base + text->VirtualAddress;
     const size_t size = text->Misc.VirtualSize;
     const Pattern patterns[] = {
-        {"player_table", kPlayerTable, 0},
         {"movement", kMovement, 0x25},
-        {"daytime", kDaytime, 0x12},
         {"registry", kRegistry, 0},
     };
-    uintptr_t* slots[] = {&out.player_table, &out.movement, &out.daytime, &out.registry};
+    uintptr_t* slots[] = {&out.movement, &out.registry};
     static_assert(std::size(patterns) == std::size(slots));
     for (size_t i = 0; i < std::size(patterns); ++i) {
         int count = 0;
@@ -177,9 +184,30 @@ bool find_targets(const uint8_t* base, Targets& out, std::string& error) {
             return false;
         }
     }
+    const struct { const char* name; const char* text; size_t offset; uintptr_t* slot; } masked[] = {
+        {"player_table", kPlayerTable, 0, &out.player_table},
+        {"daytime", kDaytime, 0x12, &out.daytime},
+    };
+    for (const auto& m : masked) {
+        std::vector<uintptr_t> hits = find_all(code, size, parse(m.text));
+        if (hits.size() != 1) {
+            std::snprintf(buf, sizeof buf, "pattern '%s' matched %zu times (need exactly 1), not hooking", m.name,
+                          hits.size());
+            error = buf;
+            return false;
+        }
+        *m.slot = hits[0] + m.offset;
+    }
     // Optional sites: missing ones leave their feature off, the rest keeps working.
     int count = 0;
     out.mining = find_unique(code, size, Pattern{"mining", kMining, 0x16}, count);
+    if (out.mining == 0) {
+        std::vector<uintptr_t> hits = find_all(code, size, parse(kMiningRecord));
+        if (hits.size() == 1) {
+            out.mining = hits[0] + kMiningRecordHook;
+            out.mining_record = true;
+        }
+    }
     out.chest = find_unique(code, size, Pattern{"chest", kChest, 0xb}, count);
     out.chat_post = find_unique(code, size, Pattern{"chat_post", kChatPost, 0}, count);
     out.bases = find_unique(code, size, Pattern{"bases", kBasesLoop, 0}, count);

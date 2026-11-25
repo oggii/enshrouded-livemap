@@ -221,15 +221,18 @@ int64_t unix_now() {
 
 // A dig produced loot: record ore-like materials as a find at the player's position.
 std::atomic<int> g_mining_logs{0};
+bool g_mining_record = false;  // 26430253+: item and amount sit in the stack entry, not in ebp/r15d
 
 void on_mining(SafetyHookContext& ctx) {
     uint32_t entity = 0;
     bool readable = read_u32(ctx.rdi + 0x14c, entity);
-    const char* name = item_name(static_cast<uint32_t>(ctx.rbp));
+    uint32_t item = static_cast<uint32_t>(ctx.rbp);
+    uint32_t amount = static_cast<uint32_t>(ctx.r15);
+    if (g_mining_record && !(read_u32(ctx.rsp + 0x68, item) && read_u32(ctx.rsp + 0x6c, amount))) return;
+    const char* name = item_name(item);
     if (g_mining_logs.fetch_add(1, std::memory_order_relaxed) < 60) {
-        log("MINING item %u (%s) amount %u material %llu entity@rdi+0x14c %u%s", static_cast<uint32_t>(ctx.rbp),
-            name ? name : "?", static_cast<uint32_t>(ctx.r15), static_cast<unsigned long long>(ctx.rbx), entity,
-            readable ? "" : " (unreadable)");
+        log("MINING item %u (%s) amount %u material %llu entity@rdi+0x14c %u%s", item, name ? name : "?", amount,
+            static_cast<unsigned long long>(ctx.rbx), entity, readable ? "" : " (unreadable)");
     }
     if (!readable || entity == 0) return;
     if (name == nullptr || !finds::is_ore_like(name)) return;
@@ -686,6 +689,7 @@ void install_mining(const Targets& t) {
         log("mining site not found: ore finds are off");
         return;
     }
+    g_mining_record = t.mining_record;
     auto h = safetyhook::MidHook::create(reinterpret_cast<void*>(t.mining), on_mining);
     if (!h) { log("could not hook mining: ore finds are off"); return; }
     g_mining_hook = std::move(*h);

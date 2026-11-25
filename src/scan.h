@@ -19,6 +19,9 @@ struct Targets {
     // Optional: FUN_140223520 (voxel dig -> loot per material), at the store of the loot entry:
     // ebp = item id, r15d = amount, rbx = material index, rdi = mining context (entity id +0x14c).
     uintptr_t mining = 0;
+    // 26430253 and later: the hook is on the call that pushes the entry; item = [rsp+0x68],
+    // amount = [rsp+0x6c], rdi = mining context as before.
+    bool mining_record = false;
     // Optional: FUN_1400a0340 (interaction system), right after it filled an
     // InteractionAcceptedEvent: rdi = event {+8 guest id, +0xc entity}, [rsp+0x38] = the entity's
     // InteractionOfferRuntime, [rsp+0x48] = its entity record, [rbp+0x7450] = the system,
