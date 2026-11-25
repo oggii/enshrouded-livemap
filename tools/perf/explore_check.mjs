@@ -5,7 +5,8 @@
 // the cells around one unkeyed point in the west ("spot"). Passes when the fog switch and the
 // Discovered mode are hidden, the fog is opaque east and clear west, keyed points = Alice's keys,
 // unkeyed points = only those in her near grid, an unkeyed west point outside it shows once Alice
-// walks up to it, and the page has no errors.
+// walks up to it, search offers no undiscovered place, region and place names follow the explored
+// area, a loot source lists its places only once Alice was within 50 m, and the page has no errors.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import http from "node:http";
