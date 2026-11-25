@@ -1,17 +1,17 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Spec für den Spoiler-Schalter (heisst jetzt ExploreMode, wie in GitHub-Issue #2) wartet auf deine Durchsicht. Dankeszeile in Changelog 1.9.0 und README eingetragen.
+**Wo wir stehen:** Spec abgenommen, Umsetzungsplan geschrieben (6 Aufgaben). Als Nächstes: Aufgaben 1 bis 4 bauen und prüfen.
 
 ## Wartet auf dich
 
-- Spec durchsehen: docs/superpowers/specs/2026-11-25-explore-mode-design.md
+- Wahl der Ausführung (Hilfsagenten pro Aufgabe oder hier in der Sitzung)
 
 ## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
 - [x] Entwurf besprochen (Seite sperrt, kleine Marker ab 50 m)
 - [x] Spec geschrieben
-- [ ] Spec von Oggi abgenommen
-- [ ] Umsetzungsplan
+- [x] Spec von Oggi abgenommen
+- [x] Umsetzungsplan (docs/superpowers/plans/2026-11-25-explore-mode-plan.md)
 - [ ] Server: Store mit Radius, near.json, /near, nearVersion, Schalter in config
 - [ ] Test explored_test für 50 m
 - [ ] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen

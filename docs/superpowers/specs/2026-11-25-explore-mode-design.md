@@ -61,7 +61,7 @@ because they come from the existing data.
   Players made those, or they show only what is around players.
 
 **Names**
-- Place names follow their markers.
+- Place names show where the land is explored, as the Discovered filter shows them today.
 - A region name shows once its label point lies in explored land.
 
 **Search and "Where do I get it?"**
