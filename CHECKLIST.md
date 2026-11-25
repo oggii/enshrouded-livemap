@@ -1,10 +1,10 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Spec abgenommen, Umsetzungsplan geschrieben (6 Aufgaben). Als Nächstes: Aufgaben 1 bis 4 bauen und prüfen.
+**Wo wir stehen:** Aufgaben 1 bis 4 gebaut und geprüft auf Zweig feat/explore-mode (bis da1e17d, nicht gepusht). Als Nächstes: Spieltest auf dem Test-Server (Aufgabe 5).
 
 ## Wartet auf dich
 
-- Wahl der Ausführung (Hilfsagenten pro Aufgabe oder hier in der Sitzung)
+- OK für den Neustart des Test-Servers mit ExploreMode=1 und Zeit für den Spieltest
 
 ## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
@@ -12,10 +12,10 @@
 - [x] Spec geschrieben
 - [x] Spec von Oggi abgenommen
 - [x] Umsetzungsplan (docs/superpowers/plans/2026-11-25-explore-mode-plan.md)
-- [ ] Server: Store mit Radius, near.json, /near, nearVersion, Schalter in config
-- [ ] Test explored_test für 50 m
-- [ ] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
-- [ ] Seitencheck explore_check.mjs
+- [x] Server: Store mit Radius, near.json, /near, nearVersion, Schalter in config
+- [x] Test explored_test für 50 m
+- [x] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
+- [x] Seitencheck explore_check.mjs
 - [ ] Spieltest auf dem Test-Server
 - [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
 - [ ] Live-Server nach OK
