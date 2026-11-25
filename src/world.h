@@ -32,6 +32,9 @@ void refresh_discovered(int64_t unix_now);
 // Where each player has been (300 m around every position seen); main.cpp calls it once a second.
 explored::Store& explored_store();
 void refresh_explored();
+// Explore mode: a second grid, marked within explored::kNearMetres of every position.
+explored::Store& near_store();
+void enable_explore_mode();
 
 // The world's Flame level as the server reports it to Steam (-1 = not known yet); main.cpp sets it.
 void set_flame_level(int level);

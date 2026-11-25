@@ -213,6 +213,7 @@ DWORD WINAPI start(LPVOID) {
     }
     const std::wstring discovered_path = dir + L"\\livemap\\discovered.json";
     const std::wstring explored_path = dir + L"\\livemap\\explored.json";
+    const std::wstring near_path = dir + L"\\livemap\\near.json";
     if (config.discovered) {
         if (read_file(discovered_path, text) && livemap::world::discovered_store().from_json(text)) {
             livemap::log("discovered: %zu players loaded", livemap::world::discovered_store().players());
@@ -220,13 +221,22 @@ DWORD WINAPI start(LPVOID) {
         if (read_file(explored_path, text) && livemap::world::explored_store().from_json(text)) {
             livemap::log("explored: %zu players loaded", livemap::world::explored_store().players());
         }
+        if (config.explore_mode) {
+            livemap::world::enable_explore_mode();
+            if (read_file(near_path, text) && livemap::world::near_store().from_json(text)) {
+                livemap::log("near: %zu players loaded", livemap::world::near_store().players());
+            }
+            livemap::log("explore mode: the map shows only what the players found (small markers within 50 m)");
+        }
     } else {
         livemap::log("discovered places and explored area off in livemap.ini (Discovered=0)");
+        if (config.explore_mode) livemap::log("ExploreMode needs Discovered=1; explore mode off");
     }
     uint64_t discovered_saved = livemap::world::discovered_store().version();
     uint64_t deaths_saved = livemap::world::deaths_store().version();
     uint64_t objects_saved = livemap::world::objects_store().version(), last_objects_save = 0;
     uint64_t explored_saved = livemap::world::explored_store().version();
+    uint64_t near_saved = livemap::world::near_store().version(), last_near_save = 0;
     uint64_t last_discovered = 0, last_explored = 0, last_explored_save = 0;
     uint64_t saved_version = livemap::world::store().version();
     uint64_t last_save = 0;
@@ -279,6 +289,11 @@ DWORD WINAPI start(LPVOID) {
             if (version != explored_saved && now - last_explored_save >= 30'000) {
                 last_explored_save = now;
                 if (write_file_atomic(explored_path, livemap::world::explored_store().to_json())) explored_saved = version;
+            }
+            const uint64_t near_version = livemap::world::near_store().version();
+            if (config.explore_mode && near_version != near_saved && now - last_near_save >= 30'000) {
+                last_near_save = now;
+                if (write_file_atomic(near_path, livemap::world::near_store().to_json())) near_saved = near_version;
             }
         }
         if (config.log_diagnostics && now - last_diag >= 30'000) {

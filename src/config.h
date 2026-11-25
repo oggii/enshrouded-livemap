@@ -20,6 +20,7 @@ struct Config {
     bool finds = true;           // ore and chest hooks (Finds=0 turns them off)
     bool bases = true;           // Flame Altars on the map (Bases=0 turns them off)
     bool discovered = true;      // which markers each player discovered (Discovered=0 turns it off)
+    bool explore_mode = false;   // ExploreMode=1: the page shows only what the players found (needs Discovered)
     bool deaths = true;          // death count per player (Deaths=0 turns it off)
     bool objects = true;         // chests, locks, switches and creatures from the world (Objects=0 turns it off)
     bool chat_probe = false;     // research: after a join, post one chat line per message type

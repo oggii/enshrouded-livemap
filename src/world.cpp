@@ -71,6 +71,8 @@ std::atomic<bool> g_objects_on{false};
 uint64_t g_objects_ms = 0;  // game thread only
 discovered::Store g_discovered;
 explored::Store g_explored;
+explored::Store g_near(explored::kNearMetres);
+std::atomic<bool> g_explore_mode{false};
 bool g_discovered_off = false;  // layout not recognised once: stop looking
 
 // Per-player dynamic knowledge (docs/RESEARCH.md section 17, build 26083076): the player
@@ -597,6 +599,10 @@ void enable_objects() {
 }
 explored::Store& explored_store() { return g_explored; }
 
+explored::Store& near_store() { return g_near; }
+
+void enable_explore_mode() { g_explore_mode.store(true, std::memory_order_relaxed); }
+
 void refresh_explored() {
     const uint64_t now = GetTickCount64();
     for (int i = 0; i < kSlotCount; ++i) {
@@ -609,7 +615,9 @@ void refresh_explored() {
             name = g_names[i];
         }
         if (name.empty()) continue;
-        g_explored.reveal(name, meters(s.x.load(std::memory_order_relaxed)), meters(s.z.load(std::memory_order_relaxed)));
+        const double x = meters(s.x.load(std::memory_order_relaxed)), z = meters(s.z.load(std::memory_order_relaxed));
+        g_explored.reveal(name, x, z);
+        if (g_explore_mode.load(std::memory_order_relaxed)) g_near.reveal(name, x, z);
     }
 }
 
@@ -848,7 +856,11 @@ std::string snapshot_json() {
     out += ",\"deathsVersion\":" + std::to_string(g_deaths.version());
     out += ",\"objectsVersion\":" + std::to_string(g_objects.version());
     out += ",\"creaturesVersion\":" + std::to_string(g_objects.creatures_version());
-    out += ",\"exploredVersion\":" + std::to_string(g_explored.version()) + "}";
+    out += ",\"exploredVersion\":" + std::to_string(g_explored.version());
+    if (g_explore_mode.load(std::memory_order_relaxed)) {
+        out += ",\"exploreMode\":true,\"nearVersion\":" + std::to_string(g_near.version());
+    }
+    out += "}";
     return out;
 }
 
