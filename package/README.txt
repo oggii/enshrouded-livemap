@@ -1,4 +1,4 @@
-Enshrouded Live Map 1.7.0
+Enshrouded Live Map 1.8.0
 =========================
 
 Server-side mod for Enshrouded dedicated servers. The server serves a live web map: players
@@ -6,7 +6,8 @@ with names and walking direction, in-game time, weather, the game's map markers,
 Altars you built, and the ore
 veins and chests your group finds. Players install nothing; they open a link in the browser.
 
-Works with server builds 25988414 and 26083076 (Enshrouded 1.0, October 2026). On other
+Works with server builds 25988414, 26083076 and 26430253 (Enshrouded 1.0, October and
+November 2026). On other
 builds the mod stays inactive and the server runs as usual; livemap.log says
 "unknown server build".
 

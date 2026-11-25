@@ -1,4 +1,8 @@
-1.8.0 (not released yet)
+1.8.0
+- Server build 26430253 (the game update of 4 November 2026). Keen moved a few things the map
+  reads (the player table, the day clock, the mining code and where the server keeps its
+  entities); the map now finds all of them on 25988414, 26083076 and 26430253, and reads the
+  entity table's place from the game itself.
 - Place names: the names the game writes on its own map (Pike's Port, Thornhold, Glennwood's
   End ... 384 of them) as a layer of their own when you zoom in, without overlapping, following
   the Discovered filter. Switch "Place names" under Overlays.

@@ -5,13 +5,14 @@ A live map of your server in the browser. Everyone with the link sees who is onl
 
 [b]Server-side only.[/b] The mod runs inside the dedicated server and serves the map itself. Players install nothing; they open a link on PC, tablet or phone. When a player joins, the chat shows the link.
 
-[size=4][b]New in 1.7.0[/b][/size]
+[size=4][b]New in 1.8.0[/b][/size]
 [list]
-[*][b]The game's own look:[/b] gold frames, separators and player arrows from the game files, a matching serif type, a compass rose and a scale in metres.[/*]
-[*][b]Region names[/b] from the game's own map labels, large when you zoom out.[/*]
-[*][b]Movable panels:[/b] drag the player list, clock or marker panel by its title; your browser remembers where.[/*]
-[*][b]Phone layout:[/b] a compact clock and the marker panel as a sheet from the bottom.[/*]
-[*][b]Smoother panning[/b] with all markers on, and [b]clay[/b] on the ore map.[/*]
+[*][b]Server build 26430253[/b] (the game update of 4 November 2026).[/*]
+[*][b]Search:[/b] places, regions, markers and players by name, with region, distance and direction from you.[/*]
+[*][b]Where do I get it?[/b] Type an item: the enemies that drop it and the chests that can hold it, with their chance and the nearest one.[/*]
+[*][b]Chests the way the server knows them:[/b] looted or still full, from the game's own state instead of a guess.[/*]
+[*][b]Locks, magic barriers and switches[/b] that were opened or used, and [b]creatures near the players[/b] live, with name, level and health.[/*]
+[*][b]Death counter[/b] next to each player's name, and the game's own [b]place names[/b] when you zoom in.[/*]
 [/list]
 
 [size=4][b]Main features[/b][/size]
@@ -27,7 +28,7 @@ A live map of your server in the browser. Everyone with the link sees who is onl
 [*][b]Fog of war:[/b] darkens everything the chosen player has not explored yet, with a soft edge that clears live while they move. The game keeps its real fog on each player's PC, so the map builds its own from where the server saw them, with the game's own reveal radius of 300 m.[/*]
 [*][b]Your Flame Altars live:[/b] every altar the players built shows up on the map with the game's altar icon and the size of its build zone, straight from the server. Build a new one and it appears within seconds; take one down and it disappears. The game's own starting altar is there too.
 [*][b]Ore map that fills itself:[/b] when a player mines copper, iron, sulfur, flint, clay, crystals or any of 22 deposit kinds, the vein appears on the map with its own icon, who found it and how often it was mined. Shared by everyone, saved across restarts.
-[*][b]Looted chests:[/b] a chest someone opened turns grey with a check mark (with name and time) and shows as full again after 30 minutes, when it refills (adjustable; chests inside a Flame Altar's build zone stay looted). One switch hides all looted chests.
+[*][b]Looted chests:[/b] a chest someone emptied turns grey with a check mark (with name and time), straight from the server's own state; the server holds the world around the players, so a chest shows the last state it saw there. One switch hides all looted chests.
 [*][b]The game's own map:[/b] drawn from the map data inside the game (height, relief, contour lines, Shroud zones), sharp down to 1 metre per pixel when you zoom in. Only the part you look at is loaded.
 [*][b]Fast:[/b] thousands of markers on one canvas, smooth panning and zooming, also on phones.
 [*][b]Your layout:[/b] drag the player list, clock or marker panel by its title to where it suits you; your browser remembers it, a double-click puts it back.[/*]
@@ -90,7 +91,7 @@ You find the full link in [i]livemap.log[/i] ("map link: ...") to post in your D
 
 [size=4][b]Requirements[/b][/size]
 [list]
-[*]Enshrouded 1.0 dedicated server, Steam builds [b]25988414[/b] and [b]26083076[/b] (October 2026).
+[*]Enshrouded 1.0 dedicated server, Steam builds [b]25988414[/b], [b]26083076[/b] and [b]26430253[/b] (October and November 2026).
 [*]Windows server, or Linux/Docker under Wine (tested with mornedhels/enshrouded-server:1.7.2-wine).
 [*]One TCP port that players can reach (the game port number by default).
 [*]A current web browser for the players.
