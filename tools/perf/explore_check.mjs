@@ -6,7 +6,10 @@
 // Discovered mode are hidden, the fog is opaque east and clear west, keyed points = Alice's keys,
 // unkeyed points = only those in her near grid, an unkeyed west point outside it shows once Alice
 // walks up to it, search offers no undiscovered place, region and place names follow the explored
-// area, a loot source lists its places only once Alice was within 50 m, and the page has no errors.
+// area, a loot source lists its places only once Alice was within 50 m, world objects from /objects
+// (locks, looted chests the data does not know) follow the same 50 m rule on the map and in the kind
+// search, explore mode is on before the first SSE message (no marker or name drawn without fog), and
+// the page has no errors.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import http from "node:http";
@@ -36,21 +39,40 @@ const grid = (b, v) => JSON.stringify({ version: v, cells: N, cellMetres: CELL, 
 const discovered = JSON.stringify({ version: 7, players: { Alice: { online: true, at: 1792780000, keys: alice } } });
 // One iron deposit Alice found far out in the unexplored east: finds are never hidden.
 const find = { sort: "Material_T4_Ore_Iron", x: 8000, y: 100, z: 5000, xp: 5, hits: 3, by: ["Alice"], first: 1792780000 };
+// World objects from /objects (the DLL reports them up to about 500 m from players): a lock and a
+// looted chest the data does not know, once inside the near grid's cell and once 400 m east of it in
+// the explored west, outside every near cell. Explore mode holds them to the 50 m rule like any marker.
+const cx = Math.floor(spot.x / CELL) * CELL, cz = Math.floor(spot.z / CELL) * CELL;
+const clearOfPois = (x, z) => pois.pois.every(p => Math.hypot(p[1] - x, p[3] - z) > 4);
+const lockNear = { x: cx + 10, z: cz + 10 }, lockFar = { x: spot.x + 400, z: spot.z };
+const chestFar = { x: spot.x + 400, z: spot.z + 40 };
+const chestNear = [[cx + 2, cz + 2], [cx + 18, cz + 2], [cx + 2, cz + 18], [cx + 18, cz + 18]].map(([x, z]) => ({ x, z })).find(c => clearOfPois(c.x, c.z));
+if (!chestNear || !clearOfPois(chestFar.x, chestFar.z)) throw new Error("fixture: a stub chest lies within 4 m of a point in pois.json");
+const nowS = Math.floor(Date.now() / 1000);
+const door = at => ({ t: "Prop_Door_Large_Castle_02_Locked_Pickable", x: at.x, y: 100, z: at.z, k: "l", on: false, at: nowS - 120 });
+const looted = at => ({ t: "LootChest_Random_wood", x: at.x, y: 100, z: at.z, empty: true, at: nowS - 300 });
+const objects = { version: 1, chests: [looted(chestNear), looted(chestFar)], switches: [door(lockNear), door(lockFar)] };
 let live = null;
+// The event stream opens at once but stays silent until the check lets go, so the page's first
+// marker draw happens before any state message.
+let openEvents;
+const gate = new Promise(r => { openEvents = r; });
 const state = () => JSON.stringify({ time: { raw: 36e12, dayStart: 216e11, dayEnd: 792e11, isDay: true, ageMs: 10 },
   players: live ? [{ entity: 7, name: "Alice", pos: live, rot: [0, 0, 0, 1], ageMs: 10 }] : [],
   weather: null, findsVersion: 0, basesVersion: 0, flameLevel: 3, discoveredVersion: 7, exploredVersion: 3,
-  exploreMode: true, nearVersion: 2 });
+  exploreMode: true, nearVersion: 2, objectsVersion: 1 });
 const types = { ".html": "text/html", ".json": "application/json", ".png": "image/png", ".webp": "image/webp" };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/events") {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
-    const t = setInterval(() => res.write("data: " + state() + "\n\n"), 250);
+    let t = null;
+    gate.then(() => { t = setInterval(() => res.write("data: " + state() + "\n\n"), 250); });
     req.on("close", () => clearInterval(t));
     return;
   }
   const stub = { "/state": state(), "/finds": JSON.stringify({ version: 0, ore: [find], chests: [] }), "/bases": '{"version":0,"bases":[]}',
+    "/objects": JSON.stringify(objects),
     "/discovered": discovered, "/explored": grid(west, 3), "/near": grid(near, 2) }[u.pathname];
   if (stub) { res.writeHead(200, { "Content-Type": "application/json" }); res.end(stub); return; }
   const file = path.join(web, u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname));
@@ -68,7 +90,22 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 page.on("pageerror", e => errors.push(e.message));
 await page.addInitScript(() => { try { localStorage.clear(); } catch {} });   // fog off and "All places" in storage: the mode must win
 await page.goto("http://127.0.0.1:" + server.address().port + "/?key=x");
-await page.waitForFunction(() => window.livemap?.discovered?.explore?.() && window.livemap.discovered.exp() && window.livemap.discovered.state(), null, { timeout: 20000 });
+// Before the first SSE message: the page took exploreMode from /state, so the first marker draw
+// and the first fog picture already follow explore mode (cached pois.json must not flash every
+// marker and region name without fog, and a stream that never delivers must not leave the page open).
+await page.waitForFunction(() => window.livemap?.poiLayer?._origin, null, { timeout: 20000 });   // the first marker draw happened
+await page.waitForTimeout(600);   // sprites, fonts and the first fog frame
+const pre = await page.evaluate(() => {
+  const lm = window.livemap, h = lm.poiLayer._hits;
+  let ordinary = 0;
+  for (let i = 0; i < h.n; i++) { const p = h.p[i]; if (!p.isFind && !(p[5] && p[5].base)) ordinary++; }
+  return { sse: !!lm.weather.state(), explore: lm.discovered.explore(), fog: lm.discovered.fogAlpha(2000, 5000), markers: h.n, ordinary,
+    regions: lm.poiLayer._regionsDrawn, names: lm.poiLayer._placeBoxes.length };
+});
+check("before the first state: explore mode on, fog opaque, no undiscovered marker or name drawn",
+  !pre.sse && pre.explore && pre.fog === 255 && pre.ordinary === 0 && pre.regions === 0 && pre.names === 0, JSON.stringify(pre));
+openEvents();
+await page.waitForFunction(() => window.livemap?.discovered?.explore?.() && window.livemap.discovered.exp() && window.livemap.discovered.state() && window.livemap.objects.data(), null, { timeout: 20000 });
 await page.click("#poiToggle");
 await page.evaluate(() => document.querySelectorAll("#poiList input:not([data-extra])").forEach(b => { if (!b.checked) { b.checked = true; b.dispatchEvent(new Event("change")); } }));
 await page.evaluate(() => window.livemap.map.setView([5120, 5120], -3, { animate: false }));
@@ -97,6 +134,14 @@ check("keyed places: only the ones Alice discovered", wrongKeyed.length === 0 &&
   `${d.filter(p => p.k !== null).length} keyed drawn, ${wrongKeyed.length} wrong`);
 check("small markers: only inside the near grid", unkeyed.length > 0 && unkeyed.every(p => cellOf(p.x, p.z) === nearCell),
   `${unkeyed.length} unkeyed drawn`);
+// World objects: a lock and a looted chest outside the near grid are not drawn (the fog is opaque
+// there), the ones inside it are. The category switches are on (all boxes were ticked above).
+const worldDrawn = await drawn();
+const at = (list, o) => list.some(p => p.x === o.x && p.z === o.z);
+check("world objects: a lock outside the near grid is not drawn, one inside is", !at(worldDrawn, lockFar) && at(worldDrawn, lockNear),
+  `far ${at(worldDrawn, lockFar)}, near ${at(worldDrawn, lockNear)}`);
+check("world objects: a looted chest outside the near grid is not drawn, one inside is", !at(worldDrawn, chestFar) && at(worldDrawn, chestNear),
+  `far ${at(worldDrawn, chestFar)}, near ${at(worldDrawn, chestNear)}`);
 const shownBefore = (await drawn()).some(p => p.x === walkTo.x && p.z === walkTo.z);
 live = [walkTo.x + 20, 120, walkTo.z];
 await page.waitForTimeout(1500);
@@ -115,6 +160,13 @@ check("search finds a discovered place", await found(knownPlace), nameOf(knownPl
 const chestHits = await page.evaluate(() => window.livemap.search("chest").filter(h => /chest/i.test(h.kind)).map(h => ({ ...h, near: window.livemap.discovered.near(h.x, h.z) })));
 check("search by kind: chests only from the near grid", chestHits.length > 0 && chestHits.every(h => h.near),
   `${chestHits.length} chest hits, ${chestHits.filter(h => !h.near).length} outside the near grid`);
+// World objects go through the same rule: of the two locks (and the two looted chests) in the kind
+// search, only the one inside the near grid is offered.
+const lockHits = await page.evaluate(() => window.livemap.search("locked").filter(h => /locked/i.test(h.kind)));
+check("search by kind: a lock outside the near grid is not offered, one inside is", at(lockHits, lockNear) && !at(lockHits, lockFar),
+  `${lockHits.length} lock hits, near ${at(lockHits, lockNear)}, far ${at(lockHits, lockFar)}`);
+check("search by kind: a looted chest outside the near grid is not offered, one inside is", at(chestHits, chestNear) && !at(chestHits, chestFar),
+  `near ${at(chestHits, chestNear)}, far ${at(chestHits, chestFar)}`);
 // Finds are never hidden, wherever they lie.
 const ironHits = await page.evaluate(() => window.livemap.search("iron"));
 check("search by kind: a find outside the explored area is offered", ironHits.some(h => h.x === find.x && h.z === find.z),

@@ -922,12 +922,12 @@
       }
       if (best >= 0) chestByPoi.set(best, c);
       else if (c.empty) add([cat("looted", "Looted chests (not in the data)", "#6b6b75", "Looted chest"), c.x, c.y, c.z,
-        "Looted chest (" + chestGrade(c.t) + ") · seen " + fmtDay(c.at), { find: true, chest: c, real: true }]);
+        "Looted chest (" + chestGrade(c.t) + ") · seen " + fmtDay(c.at), { find: true, chest: c, real: true, world: true }]);
     }
     for (const s of objects.switches || []) {
       if (/crafted|craftable|buildingset|spawnpoint|respawner/i.test(s.t)) continue;   // built by players, enemy spawners
       const i = s.on ? cat("lock_open", "Unlocked & opened", "#8fd16a", "Opened") : cat("lock_closed", "Locked & closed", "#e0a35a", "Closed");
-      add([i, s.x, s.y, s.z, switchName(s) + " · " + switchState(s) + (s.on ? " since " : " · seen ") + fmtDay(s.at), { find: true, sw: s }]);
+      add([i, s.x, s.y, s.z, switchName(s) + " · " + switchState(s) + (s.on ? " since " : " · seen ") + fmtDay(s.at), { find: true, sw: s, world: true }]);
     }
   }
   function maybeRefreshObjects(version) {
@@ -1076,7 +1076,9 @@
     fetchJsonRetry("icons/icons.json" + q, {}),
     fetch("finds" + q).then(r => r.ok ? r.json() : null).catch(() => null),
     fetch("bases" + q).then(r => r.ok ? r.json() : null).catch(() => null),
-  ]).then(([data, icons, finds, bases]) => {
+    // The first state, so explore mode is on before the first marker is drawn (the SSE stream may be late).
+    fetch("state" + q).then(r => r.ok ? r.json() : null).catch(() => null),
+  ]).then(([data, icons, finds, bases, st]) => {
     if (!data) return;
     iconFiles = icons || {};
     rawPoiData = data;
@@ -1088,6 +1090,7 @@
     findsVersion = finds ? finds.version : -1;
     basesData = bases;
     basesVersion = bases ? bases.version : -1;
+    if (st && st.exploreMode && !EXPLORE) applyExploreMode();
     rebuildPois();
     poiLayer.addTo(map);
   });
@@ -1137,8 +1140,10 @@
     return known === null ? false : discMode === "known" ? !known : known;
   }
   // Explore mode: finds and altars always (players made them); keyed places once a chosen player
-  // discovered them in the game; everything else once a player was within 50 m.
+  // discovered them in the game; everything else, world objects from /objects (locks, barriers,
+  // switches, looted chests not in the data) included, once a player was within 50 m.
   function exploreKnown(p) {
+    if (p[5] && p[5].world) return nearAt(p[1], p[3]);
     if (p.isFind || (p[5] && p[5].base)) return null;
     if (p.k !== undefined) return !!DISC && discNames().some(n => DISC.players[n] && DISC.players[n].keys.has(p.k));
     return nearAt(p[1], p[3]);
@@ -1877,9 +1882,12 @@
     return EXP ? exploredAt(h.x, h.z) : null;
   }
   // Explore mode: nothing the group has not found, in the list or among a kind's nearest five.
-  // Players, items and finds (made by players, like Flame Altars) are never hidden.
+  // Players, items and finds (made by players, like Flame Altars) are never hidden; world objects
+  // (e.world) follow the 50 m rule like any other marker.
   function searchHidden(e) {
-    if (!EXPLORE || e.kind === "Player" || e.kind === "Item" || e.find) return false;
+    if (!EXPLORE || e.kind === "Player" || e.kind === "Item") return false;
+    if (e.world) return discHidden(e.world);
+    if (e.find) return false;
     if (e.p) return discHidden(e.p);
     return !exploredAt(e.x, e.z);
   }
@@ -1913,7 +1921,7 @@
       if (poiData && q.length >= 3) poiData.categories.forEach((cat, ci) => {
         if (!cat.label.toLowerCase().split(/[\s&]+/).some(w => w.startsWith(q))) return;
         const kind = kindOf(cat);
-        poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, find: !!p.isFind, r: 1.5 }))
+        poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, world: p[5] && p[5].world ? p : null, find: !!p.isFind, r: 1.5 }))
           .filter(e => !searchHidden(e)).sort((a, b) => far(a) - far(b)).slice(0, 5)
           .forEach(e => { if (!hits.some(h => h.name === e.name && Math.abs(h.x - e.x) < 80 && Math.abs(h.z - e.z) < 80)) hits.push(e); });
       });
