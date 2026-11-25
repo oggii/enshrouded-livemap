@@ -15,7 +15,7 @@
 - [ ] Server: Store mit Radius, near.json, /near, nearVersion, Schalter in config
 - [ ] Test explored_test für 50 m
 - [ ] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
-- [ ] Seitencheck nospoiler_check.mjs
+- [ ] Seitencheck explore_check.mjs
 - [ ] Spieltest auf dem Test-Server
 - [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
 - [ ] Live-Server nach OK
