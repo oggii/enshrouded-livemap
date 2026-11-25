@@ -1877,10 +1877,16 @@
     return EXP ? exploredAt(h.x, h.z) : null;
   }
   // Explore mode: nothing the group has not found, in the list or among a kind's nearest five.
+  // Players, items and finds (made by players, like Flame Altars) are never hidden.
   function searchHidden(e) {
-    if (!EXPLORE || e.kind === "Player" || e.kind === "Item") return false;
+    if (!EXPLORE || e.kind === "Player" || e.kind === "Item" || e.find) return false;
     if (e.p) return discHidden(e.p);
     return !exploredAt(e.x, e.z);
+  }
+  // Explore mode: a region counts once its label (at the Ancient Spire) lies in the explored area.
+  function regionSeen(name) {
+    const r = ((rawPoiData && rawPoiData.regions) || []).find(r => r[0] === name);
+    return !!r && exploredAt(r[1], r[2]);
   }
   // Explore mode: a loot source's places count once a player was within 50 m of them.
   function sourcePts(g) {
@@ -1907,7 +1913,7 @@
       if (poiData && q.length >= 3) poiData.categories.forEach((cat, ci) => {
         if (!cat.label.toLowerCase().split(/[\s&]+/).some(w => w.startsWith(q))) return;
         const kind = kindOf(cat);
-        poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, r: 1.5 }))
+        poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, find: !!p.isFind, r: 1.5 }))
           .filter(e => !searchHidden(e)).sort((a, b) => far(a) - far(b)).slice(0, 5)
           .forEach(e => { if (!hits.some(h => h.name === e.name && Math.abs(h.x - e.x) < 80 && Math.abs(h.z - e.z) < 80)) hits.push(e); });
       });
@@ -1942,10 +1948,11 @@
         const d = (pts[i] - from[0]) ** 2 + (pts[i + 1] - from[1]) ** 2;
         if (!near || d < near.d) near = { d, x: pts[i], z: pts[i + 1] };
       }
-      const regions = LOOT.regions.filter((_, i) => (g[3] >> i) & 1);
+      const allRegions = LOOT.regions.filter((_, i) => (g[3] >> i) & 1);
+      const regions = EXPLORE ? allRegions.filter(regionSeen) : allRegions;
       const count = EXPLORE && pts ? pts.length / 2 : g[2];
       const where = near ? count + (count === 1 ? " place" : " places") + " · nearest " + awayText(from, near.x, near.z)
-        : EXPLORE && pts ? "no place found yet"
+        : EXPLORE && (pts || (allRegions.length && !regions.length)) ? "no place found yet"
         : "found in " + (regions.length > 3 ? regions.length + " regions" : regions.join(", ") || "the world");
       return { name: g[0], kind: SOURCE_KINDS[g[1]] || g[1], source: true, g, item, x: near ? near.x : null, z: near ? near.z : null, zoom: -0.5,
         chance, d: near ? near.d : Infinity, meta: esc(chanceText(chance, g[1]) + " · " + where) };

@@ -25,15 +25,17 @@ const bits = () => new Uint8Array(N * N / 8);
 const set = (b, i) => { b[i >> 3] |= 1 << (i & 7); };
 const west = bits();
 for (let row = 0; row < N; row++) for (let col = 0; col < N / 2; col++) set(west, row * N + col);
-// Unkeyed, non-find points in the west, away from the edges; the first is in the near grid.
-const westUnkeyed = pois.pois.map((p, i) => ({ i, x: p[1], z: p[3] }))
+// Unkeyed, non-find points in the west, away from the edges; the first chest is in the near grid.
+const westUnkeyed = pois.pois.map((p, i) => ({ i, x: p[1], z: p[3], cat: pois.categories[p[0]].id }))
   .filter(p => !keyedIdx.has(p.i) && p.x > 1000 && p.x < 4500 && p.z > 1000 && p.z < 9000);
-const spot = westUnkeyed[0];
+const spot = westUnkeyed.find(p => /^chest_/.test(p.cat));
 const walkTo = westUnkeyed.find(p => Math.hypot(p.x - spot.x, p.z - spot.z) > 500);
 const near = bits();
 set(near, cellOf(spot.x, spot.z));
 const grid = (b, v) => JSON.stringify({ version: v, cells: N, cellMetres: CELL, players: { Alice: Buffer.from(b).toString("base64") } });
 const discovered = JSON.stringify({ version: 7, players: { Alice: { online: true, at: 1792780000, keys: alice } } });
+// One iron deposit Alice found far out in the unexplored east: finds are never hidden.
+const find = { sort: "Material_T4_Ore_Iron", x: 8000, y: 100, z: 5000, xp: 5, hits: 3, by: ["Alice"], first: 1792780000 };
 let live = null;
 const state = () => JSON.stringify({ time: { raw: 36e12, dayStart: 216e11, dayEnd: 792e11, isDay: true, ageMs: 10 },
   players: live ? [{ entity: 7, name: "Alice", pos: live, rot: [0, 0, 0, 1], ageMs: 10 }] : [],
@@ -48,7 +50,7 @@ const server = http.createServer((req, res) => {
     req.on("close", () => clearInterval(t));
     return;
   }
-  const stub = { "/state": state(), "/finds": '{"version":0,"ore":[],"chests":[]}', "/bases": '{"version":0,"bases":[]}',
+  const stub = { "/state": state(), "/finds": JSON.stringify({ version: 0, ore: [find], chests: [] }), "/bases": '{"version":0,"bases":[]}',
     "/discovered": discovered, "/explored": grid(west, 3), "/near": grid(near, 2) }[u.pathname];
   if (stub) { res.writeHead(200, { "Content-Type": "application/json" }); res.end(stub); return; }
   const file = path.join(web, u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname));
@@ -108,6 +110,15 @@ const nameOf = p => String(p[4]).split(" · ").pop();
 const found = async p => (await page.evaluate(t => window.livemap.search(t), nameOf(p))).some(h => h.x === p[1] && h.z === p[3]);
 check("search hides an undiscovered place", !(await found(hiddenPlace)), nameOf(hiddenPlace));
 check("search finds a discovered place", await found(knownPlace), nameOf(knownPlace));
+// A kind word lists the nearest five of that kind (the category branch). Chests are unkeyed, so
+// only the ones in the near grid may come up, and the one in the fixture's near grid must.
+const chestHits = await page.evaluate(() => window.livemap.search("chest").filter(h => /chest/i.test(h.kind)).map(h => ({ ...h, near: window.livemap.discovered.near(h.x, h.z) })));
+check("search by kind: chests only from the near grid", chestHits.length > 0 && chestHits.every(h => h.near),
+  `${chestHits.length} chest hits, ${chestHits.filter(h => !h.near).length} outside the near grid`);
+// Finds are never hidden, wherever they lie.
+const ironHits = await page.evaluate(() => window.livemap.search("iron"));
+check("search by kind: a find outside the explored area is offered", ironHits.some(h => h.x === find.x && h.z === find.z),
+  `${ironHits.length} hits for iron`);
 
 // Region and place names follow the explored area. Alice explored x < 5120; the checks centre the
 // view, wait for a redraw (and the font), then read what the layer drew.
@@ -119,7 +130,7 @@ const names = (x, z, zoom) => page.evaluate(([x, z, zoom, places]) => new Promis
     l.redraw();
     const b = m.getBounds(), inView = (px, pz) => px >= b.getWest() && px <= b.getEast() && pz >= b.getSouth() && pz <= b.getNorth();
     r({ regions: l._regionsDrawn, boxes: l._placeBoxes.length,
-      regionsInView: window.livemap.discovered.regions().filter(([, px, pz]) => inView(px, pz)).map(rg => rg[1]),
+      regionsInView: window.livemap.discovered.regions().filter(([, px, pz]) => inView(px, pz)).length,
       placesInView: places.filter(([, px, pz]) => inView(px, pz)).length });
   }, 500);
 }), [x, z, zoom, pois.places]);
@@ -127,9 +138,9 @@ const names = (x, z, zoom) => page.evaluate(([x, z, zoom, places]) => new Promis
 // in the view, so the expected count is not cut down by the view; it must be neither 0 nor all.
 const world = await names(5120, 5120, -3);
 const wantRegions = pois.regions.filter(r => r[1] < 5120).length;
-check("region names: only the explored ones", world.regionsInView.length === pois.regions.length
+check("region names: only the explored ones", world.regionsInView === pois.regions.length
   && wantRegions > 0 && wantRegions < pois.regions.length && world.regions === wantRegions,
-  `${world.regions} drawn, ${wantRegions} of ${pois.regions.length} explored, ${world.regionsInView.length} in view`);
+  `${world.regions} drawn, ${wantRegions} of ${pois.regions.length} explored, ${world.regionsInView} in view`);
 // (b) Place names: none over the unexplored east although the view holds places; some over an
 // explored spot in the west (the control: without it "none" would pass for any reason). The east
 // spot is picked so that the canvas around the view (1960 x 1400 m at zoom -1, 20 % padding) stays
@@ -157,9 +168,10 @@ await page.waitForTimeout(500);
 const loot = JSON.parse(fs.readFileSync(path.join(web, "loot.json"), "utf8"));
 const lonePoint = g => {
   const pts = g[4] || [], clear = (x, z, p) => Math.hypot(x - p.x, z - p.z) > 200;
+  // None of the source's places lies near the fixture's near grid (the chest, the walk-to point).
+  if (!pts.every((v, j) => j % 2 || (clear(v, pts[j + 1], spot) && clear(v, pts[j + 1], walkTo)))) return null;
   for (let i = 0; i < pts.length; i += 2) {
-    if (pts[i] < 4500 && clear(pts[i], pts[i + 1], spot) && clear(pts[i], pts[i + 1], walkTo)
-      && pts.every((v, j) => j % 2 || j === i || Math.hypot(v - pts[i], pts[j + 1] - pts[i + 1]) > 100)) return [pts[i], pts[i + 1]];
+    if (pts[i] < 4500 && pts.every((v, j) => j % 2 || j === i || Math.hypot(v - pts[i], pts[j + 1] - pts[i + 1]) > 100)) return [pts[i], pts[i + 1]];
   }
   return null;
 };
@@ -170,21 +182,25 @@ const sourceCases = loot.items.map(it => {
 }).filter(Boolean);
 await page.focus("#searchBox");   // the first use loads loot.json
 await page.waitForFunction(() => window.livemap.search.loot(), null, { timeout: 20000 });
-let pick = null;
-for (const c of sourceCases.slice(0, 80)) {
-  const hits = await page.evaluate(t => window.livemap.search(t), c.item);
-  if (hits.length === 1 && hits[0].kind === "Item") { pick = c; break; }
-}
-const sourceMeta = () => page.evaluate(([item, name]) => {
+// The first case whose item is the only search hit for its own name.
+const singleItem = async cases => {
+  for (const c of cases.slice(0, 80)) {
+    const hits = await page.evaluate(t => window.livemap.search(t), c.item);
+    if (hits.length === 1 && hits[0].kind === "Item") return c;
+  }
+  return null;
+};
+const pick = await singleItem(sourceCases);
+const sourceMeta = c => page.evaluate(([item, name]) => {
   window.livemap.search(item); window.livemap.search.go();
   const li = [...document.querySelectorAll("#searchResults li[data-i]")].find(l => l.firstChild.textContent === name);
   return li ? li.querySelector(".m").textContent : null;
-}, [pick.item, pick.g[0]]);
-const metaBefore = await sourceMeta();
+}, [c.item, c.g[0]]);
+const metaBefore = await sourceMeta(pick);
 check("item source: no place until a player was within 50 m", metaBefore !== null && metaBefore.endsWith("no place found yet"), `${pick.item} / ${pick.g[0]}: ${metaBefore}`);
 live = [pick.at[0], 120, pick.at[1]];
 await page.waitForTimeout(1500);
-const metaAfter = await sourceMeta();
+const metaAfter = await sourceMeta(pick);
 const ringed = await page.evaluate(name => {
   const li = [...document.querySelectorAll("#searchResults li[data-i]")].find(l => l.firstChild.textContent === name);
   li.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -192,6 +208,25 @@ const ringed = await page.evaluate(name => {
 }, pick.g[0]);
 check("item source: the place counts once Alice stands on it", metaAfter !== null && metaAfter.includes("1 place · nearest here") && ringed === 1,
   `${metaAfter}, ${ringed} ringed`);
+
+// A source without places says where it is found, but only in regions whose label Alice has
+// explored (here x < 5120, as in the region names check); with none of them, "no place found yet".
+const exploredRegions = new Set(pois.regions.filter(r => r[1] < 5120).map(r => r[0]));
+const regionsOf = g => loot.regions.filter((_, i) => (g[3] >> i) & 1);
+const regionCases = keep => loot.items.map(it => {
+  const gs = it[2].map(([gi]) => loot.groups[gi]);
+  const g = gs.find(g => !g[4] && gs.filter(o => o[0] === g[0]).length === 1 && keep(regionsOf(g).filter(r => exploredRegions.has(r)), regionsOf(g)));
+  return g && { item: it[1], g };
+}).filter(Boolean);
+const mixed = await singleItem(regionCases((seen, all) => seen.length >= 1 && seen.length <= 3 && seen.length < all.length));
+const mixedMeta = await sourceMeta(mixed);
+const mixedSeen = regionsOf(mixed.g).filter(r => exploredRegions.has(r)), mixedUnseen = regionsOf(mixed.g).filter(r => !exploredRegions.has(r));
+check("item source without places: only the explored regions", mixedMeta !== null && mixedMeta.endsWith("found in " + mixedSeen.join(", ")) && mixedUnseen.every(r => !mixedMeta.includes(r)),
+  `${mixed.item} / ${mixed.g[0]}: ${mixedMeta} (unexplored: ${mixedUnseen.join(", ")})`);
+const none = await singleItem(regionCases((seen, all) => all.length >= 1 && seen.length === 0));
+const noneMeta = await sourceMeta(none);
+check("item source without places: no explored region, no place found yet", noneMeta !== null && noneMeta.endsWith("no place found yet"),
+  `${none.item} / ${none.g[0]}: ${noneMeta} (in ${regionsOf(none.g).join(", ")})`);
 
 if (shot) { await page.screenshot({ path: shot }); }
 
