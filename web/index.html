@@ -1876,6 +1876,20 @@
     if (h.p) return discKnown(h.p);
     return EXP ? exploredAt(h.x, h.z) : null;
   }
+  // Explore mode: nothing the group has not found, in the list or among a kind's nearest five.
+  function searchHidden(e) {
+    if (!EXPLORE || e.kind === "Player" || e.kind === "Item") return false;
+    if (e.p) return discHidden(e.p);
+    return !exploredAt(e.x, e.z);
+  }
+  // Explore mode: a loot source's places count once a player was within 50 m of them.
+  function sourcePts(g) {
+    const pts = g[4];
+    if (!pts || !EXPLORE) return pts;
+    const out = [];
+    for (let i = 0; i < pts.length; i += 2) if (nearAt(pts[i], pts[i + 1])) out.push(pts[i], pts[i + 1]);
+    return out;
+  }
   // Names that start with the text first, then a word starting with it, then the rest; a kind of
   // point ("gold", "spire", "shrine") adds its five nearest points. Within a rank: players,
   // regions, places, markers, then the nearest first. Each result says its region, how far and
@@ -1889,12 +1903,12 @@
       const rank = n => { const s = n.toLowerCase(); return s.startsWith(q) ? 0 : s.split(/[\s'"(-]+/).some(w => w.startsWith(q)) ? 1 : s.includes(q) ? 2 : 9; };
       const order = { Player: 0, Region: 1, Place: 2, Item: 4 };
       const far = e => e.x === null ? 0 : (e.x - from[0]) ** 2 + (e.z - from[1]) ** 2;
-      const hits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9);
+      const hits = searchEntries().map(e => ({ ...e, r: rank(e.name) })).filter(e => e.r < 9 && !searchHidden(e));
       if (poiData && q.length >= 3) poiData.categories.forEach((cat, ci) => {
         if (!cat.label.toLowerCase().split(/[\s&]+/).some(w => w.startsWith(q))) return;
         const kind = kindOf(cat);
         poiData.pois.filter(p => p[0] === ci).map(p => ({ name: p[4] ? String(p[4]).split(" · ").pop() : kind, kind, x: p[1], z: p[3], zoom: 0.5, p: p.isFind ? null : p, r: 1.5 }))
-          .sort((a, b) => far(a) - far(b)).slice(0, 5)
+          .filter(e => !searchHidden(e)).sort((a, b) => far(a) - far(b)).slice(0, 5)
           .forEach(e => { if (!hits.some(h => h.name === e.name && Math.abs(h.x - e.x) < 80 && Math.abs(h.z - e.z) < 80)) hits.push(e); });
       });
       searchHits = hits.sort((a, b) => a.r - b.r || (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || far(a) - far(b) || a.name.localeCompare(b.name)).slice(0, 8);
@@ -1922,14 +1936,16 @@
     const me = searchMe(), c = map.getCenter(), from = me ? [me.pos[0], me.pos[2]] : [c.lng, c.lat];
     const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     searchHits = item[2].map(([gi, chance]) => {
-      const g = LOOT.groups[gi], pts = g[4];
+      const g = LOOT.groups[gi], pts = sourcePts(g);
       let near = null;
       if (pts) for (let i = 0; i < pts.length; i += 2) {
         const d = (pts[i] - from[0]) ** 2 + (pts[i + 1] - from[1]) ** 2;
         if (!near || d < near.d) near = { d, x: pts[i], z: pts[i + 1] };
       }
       const regions = LOOT.regions.filter((_, i) => (g[3] >> i) & 1);
-      const where = near ? g[2] + (g[2] === 1 ? " place" : " places") + " · nearest " + awayText(from, near.x, near.z)
+      const count = EXPLORE && pts ? pts.length / 2 : g[2];
+      const where = near ? count + (count === 1 ? " place" : " places") + " · nearest " + awayText(from, near.x, near.z)
+        : EXPLORE && pts ? "no place found yet"
         : "found in " + (regions.length > 3 ? regions.length + " regions" : regions.join(", ") || "the world");
       return { name: g[0], kind: SOURCE_KINDS[g[1]] || g[1], source: true, g, item, x: near ? near.x : null, z: near ? near.z : null, zoom: -0.5,
         chance, d: near ? near.d : Infinity, meta: esc(chanceText(chance, g[1]) + " · " + where) };
@@ -1948,7 +1964,7 @@
   function showSource(h) {
     lootLayer.clearLayers();
     stopFollowing();
-    const pts = h.g[4];
+    const pts = sourcePts(h.g);
     if (pts) for (let i = 0; i < pts.length; i += 2) {
       L.circleMarker([pts[i + 1], pts[i]], { renderer: lootRenderer, radius: 6, color: "#f6dca0", weight: 2, fillColor: "#e8b04a", fillOpacity: 0.35,
         interactive: false }).addTo(lootLayer);
@@ -2102,6 +2118,9 @@
       const n = fog.canvas.width, col = Math.floor(x / 10240 * n), row = Math.floor(z / 10240 * n);
       return col >= 0 && row >= 0 && col < n && row < n ? Math.round(fog.cur[row * n + col]) : null;
     } };
+  // For tools/perf/explore_check.mjs: the search as a function (text -> hits with their spot),
+  // keeping the members the other checks call (search.find, search.meta, ...).
+  window.livemap.search = Object.assign(text => { searchBox.value = text; runSearch(); return searchHits.map(h => ({ name: h.name, kind: h.kind, x: h.x, z: h.z })); }, window.livemap.search);
   window.livemap.shroud = { levelAt: (x, z) => shroudLevelAt(x, z), flame: () => flameLevel(), ready: () => !!SHROUD && shroudFlame === flameLevel() };
   window.livemap.weather = {
     state: () => lastState,

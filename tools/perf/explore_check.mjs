@@ -70,8 +70,12 @@ await page.click("#poiToggle");
 await page.evaluate(() => document.querySelectorAll("#poiList input:not([data-extra])").forEach(b => { if (!b.checked) { b.checked = true; b.dispatchEvent(new Event("change")); } }));
 await page.evaluate(() => window.livemap.map.setView([5120, 5120], -3, { animate: false }));
 await page.waitForTimeout(1500);
-const hidden = await page.evaluate(() => ["fogSwitch", "discMode"].map(id => { const e = document.getElementById(id); return !e || e.offsetParent === null; }));
+// Each element must exist and be hidden by its own computed style (an absent element or a hidden
+// parent would pass a looser test); the by-player picker stays.
+const hidden = await page.evaluate(() => ["fogSwitch", "discMode"].map(id => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display === "none"; }));
 check("fog switch and Discovered mode are hidden", hidden.every(Boolean), JSON.stringify(hidden));
+const discByDisplay = await page.evaluate(() => { const e = document.getElementById("discBy"); return e ? getComputedStyle(e).display : "missing"; });
+check("by-player picker stays shown", discByDisplay !== "none" && discByDisplay !== "missing", discByDisplay);
 const note = await page.evaluate(() => document.getElementById("discNote")?.textContent || "");
 check("panel explains explore mode", note.startsWith("Explore mode:"), note);
 const alpha = await page.evaluate(() => [window.livemap.discovered.fogAlpha(2000, 5000), window.livemap.discovered.fogAlpha(8000, 5000)]);
@@ -95,7 +99,101 @@ live = [walkTo.x + 20, 120, walkTo.z];
 await page.waitForTimeout(1500);
 const shownAfter = (await drawn()).some(p => p.x === walkTo.x && p.z === walkTo.z);
 check("live: a small marker shows once Alice is within 50 m", !shownBefore && shownAfter, `${shownBefore} -> ${shownAfter}`);
+// Search: a keyed place Alice has not discovered (in the unexplored east, so no explored place
+// label sits on the same spot) is not offered; one she discovered is.
+const hiddenPlace = keyed.filter(([i, k]) => !keys.has(k) && pois.pois[i][4] && pois.pois[i][1] > 5600).map(([i]) => pois.pois[i])[0];
+const knownPlace = keyed.filter(([, k]) => keys.has(k)).map(([i]) => pois.pois[i]).find(p => p[4]);
+const nameOf = p => String(p[4]).split(" · ").pop();
+const found = async p => (await page.evaluate(t => window.livemap.search(t), nameOf(p))).some(h => h.x === p[1] && h.z === p[3]);
+check("search hides an undiscovered place", !(await found(hiddenPlace)), nameOf(hiddenPlace));
+check("search finds a discovered place", await found(knownPlace), nameOf(knownPlace));
+
+// Region and place names follow the explored area. Alice explored x < 5120; the checks centre the
+// view, wait for a redraw (and the font), then read what the layer drew.
+await page.evaluate(() => document.fonts.ready);
+const names = (x, z, zoom) => page.evaluate(([x, z, zoom, places]) => new Promise(r => {
+  const m = window.livemap.map, l = window.livemap.poiLayer;
+  m.setView([z, x], zoom, { animate: false });
+  setTimeout(() => {
+    l.redraw();
+    const b = m.getBounds(), inView = (px, pz) => px >= b.getWest() && px <= b.getEast() && pz >= b.getSouth() && pz <= b.getNorth();
+    r({ regions: l._regionsDrawn, boxes: l._placeBoxes.length,
+      regionsInView: window.livemap.discovered.regions().filter(([, px, pz]) => inView(px, pz)).map(rg => rg[1]),
+      placesInView: places.filter(([, px, pz]) => inView(px, pz)).length });
+  }, 500);
+}), [x, z, zoom, pois.places]);
+// (a) Zoomed out over the whole world: only the regions with x < 5120 are named. All of them lie
+// in the view, so the expected count is not cut down by the view; it must be neither 0 nor all.
+const world = await names(5120, 5120, -3);
+const wantRegions = pois.regions.filter(r => r[1] < 5120).length;
+check("region names: only the explored ones", world.regionsInView.length === pois.regions.length
+  && wantRegions > 0 && wantRegions < pois.regions.length && world.regions === wantRegions,
+  `${world.regions} drawn, ${wantRegions} of ${pois.regions.length} explored, ${world.regionsInView.length} in view`);
+// (b) Place names: none over the unexplored east although the view holds places; some over an
+// explored spot in the west (the control: without it "none" would pass for any reason). The east
+// spot is picked so that the canvas around the view (1960 x 1400 m at zoom -1, 20 % padding) stays
+// clear of the 300 m circles around the places Alice discovered in the east, and holds many places.
+const aliceEast = keyed.filter(([, k]) => keys.has(k)).map(([i]) => pois.pois[i]).filter(p => p[1] > 4800);
+let eastAt = null;
+for (let x = 7400; x <= 9600; x += 100) for (let z = 1000; z <= 9500; z += 100) {
+  if (!aliceEast.every(p => Math.abs(p[1] - x) > 2260 || Math.abs(p[3] - z) > 1700)) continue;
+  const n = pois.places.filter(q => Math.abs(q[1] - x) < 1400 && Math.abs(q[2] - z) < 1000).length;
+  if (!eastAt || n > eastAt.n) eastAt = { x, z, n };
+}
+const eastNames = await names(eastAt.x, eastAt.z, -1);
+check("place names: none over the unexplored east", eastNames.boxes === 0 && eastNames.placesInView >= 10,
+  `${eastNames.boxes} drawn, ${eastNames.placesInView} places in view at ${eastAt.x}, ${eastAt.z}`);
+const westPlaces = pois.places.filter(p => p[1] > 2000 && p[1] < 3500);
+const westSpot = westPlaces.map(p => ({ p, n: westPlaces.filter(q => Math.hypot(q[1] - p[1], q[2] - p[2]) < 700).length })).sort((a, b) => b.n - a.n)[0].p;
+const westNames = await names(westSpot[1], westSpot[2], -1);
+check("place names: shown over an explored spot in the west", westNames.boxes > 0, `${westNames.boxes} drawn around ${westSpot[0]}`);
+await page.evaluate(() => window.livemap.map.setView([5120, 5120], -3, { animate: false }));
+await page.waitForTimeout(500);
+
+// Item sources: "where to get" lists a source's places only once Alice was within 50 m of one. A
+// source with a place in the west that no near cell covers yet says "no place found yet"; once
+// Alice stands on that place it counts 1 place, nearest here, and picking it rings that one place.
+const loot = JSON.parse(fs.readFileSync(path.join(web, "loot.json"), "utf8"));
+const lonePoint = g => {
+  const pts = g[4] || [], clear = (x, z, p) => Math.hypot(x - p.x, z - p.z) > 200;
+  for (let i = 0; i < pts.length; i += 2) {
+    if (pts[i] < 4500 && clear(pts[i], pts[i + 1], spot) && clear(pts[i], pts[i + 1], walkTo)
+      && pts.every((v, j) => j % 2 || j === i || Math.hypot(v - pts[i], pts[j + 1] - pts[i + 1]) > 100)) return [pts[i], pts[i + 1]];
+  }
+  return null;
+};
+const sourceCases = loot.items.map(it => {
+  const gs = it[2].map(([gi]) => loot.groups[gi]);
+  const g = gs.find(g => lonePoint(g) && gs.filter(o => o[0] === g[0]).length === 1);
+  return g && { item: it[1], g, at: lonePoint(g) };
+}).filter(Boolean);
+await page.focus("#searchBox");   // the first use loads loot.json
+await page.waitForFunction(() => window.livemap.search.loot(), null, { timeout: 20000 });
+let pick = null;
+for (const c of sourceCases.slice(0, 80)) {
+  const hits = await page.evaluate(t => window.livemap.search(t), c.item);
+  if (hits.length === 1 && hits[0].kind === "Item") { pick = c; break; }
+}
+const sourceMeta = () => page.evaluate(([item, name]) => {
+  window.livemap.search(item); window.livemap.search.go();
+  const li = [...document.querySelectorAll("#searchResults li[data-i]")].find(l => l.firstChild.textContent === name);
+  return li ? li.querySelector(".m").textContent : null;
+}, [pick.item, pick.g[0]]);
+const metaBefore = await sourceMeta();
+check("item source: no place until a player was within 50 m", metaBefore !== null && metaBefore.endsWith("no place found yet"), `${pick.item} / ${pick.g[0]}: ${metaBefore}`);
+live = [pick.at[0], 120, pick.at[1]];
+await page.waitForTimeout(1500);
+const metaAfter = await sourceMeta();
+const ringed = await page.evaluate(name => {
+  const li = [...document.querySelectorAll("#searchResults li[data-i]")].find(l => l.firstChild.textContent === name);
+  li.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  return window.livemap.search.ringed();
+}, pick.g[0]);
+check("item source: the place counts once Alice stands on it", metaAfter !== null && metaAfter.includes("1 place · nearest here") && ringed === 1,
+  `${metaAfter}, ${ringed} ringed`);
+
 if (shot) { await page.screenshot({ path: shot }); }
+
 check("no page errors", errors.length === 0, errors.join(" | ") || "none");
 console.log(results.every(Boolean) ? "ALL PASS" : "SOME FAILED");
 await browser.close();
