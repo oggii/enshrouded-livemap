@@ -1,10 +1,10 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Aufgaben 1 bis 4 gebaut und geprüft auf Zweig feat/explore-mode (bis da1e17d, nicht gepusht). Als Nächstes: Spieltest auf dem Test-Server (Aufgabe 5).
+**Wo wir stehen:** Test-Server läuft seit 26.11.2026 mit dem ExploreMode-Build und ExploreMode=1 (Log, /state und /near geprüft). Als Nächstes: Spieltest durch Oggi (Aufgabe 5, Schritt 4).
 
 ## Wartet auf dich
 
-- OK für den Neustart des Test-Servers mit ExploreMode=1 und Zeit für den Spieltest
+- Spieltest auf dem Test-Server: Karte schwarz bis auf Erkundetes, Truhe ab 50 m, Stadt nach Entdeckung, Suche nach unentdeckter Stadt leer
 
 ## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
