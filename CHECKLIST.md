@@ -1,10 +1,10 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Spieltest auf dem Test-Server am 26.11.2026 bestanden (Karte schwarz bis auf Erkundetes, Truhe ab 50 m, Ort nach Entdeckung, near.json gespeichert). Als Nächstes: Release 1.9.0 (Aufgabe 6).
+**Wo wir stehen:** 1.9.0 mit ExploreMode am 26.11.2026 veröffentlicht (GitHub, Nexus 2740/2741, Check PASS) und auf dem Live-Server (ExploreMode dort aus). Als Nächstes: Versprechen 2, Spieler in Dungeons am Eingang zeigen.
 
 ## Wartet auf dich
 
-- OK für Release 1.9.0: Push, GitHub-Release, Nexus-Upload und Beschreibung, Antworten an entrigant, unholyhakisak und Issue #2
+- Nichts offen.
 
 ## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
@@ -17,8 +17,8 @@
 - [x] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
 - [x] Seitencheck explore_check.mjs
 - [x] Spieltest auf dem Test-Server
-- [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
-- [ ] Live-Server nach OK
+- [x] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
+- [x] Live-Server nach OK
 
 ## 2. Spieler in Dungeons am Eingang zeigen
 
