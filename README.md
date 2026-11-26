@@ -107,6 +107,7 @@ stops the IP lookup entirely.
 | `Finds` | `1` | Ore deposits and opened chests on the map. |
 | `Bases` | `1` | The players' Flame Altars on the map. |
 | `Discovered` | `1` | Which places each player discovered and where they have been (filter and fog of war). |
+| `ExploreMode` | `0` | `1` = the map shows only what your players found: dark fog of war, places once discovered, chests and other small markers once a player was within 50 m; search and item sources follow. Needs `Discovered=1`. |
 | `Deaths` | `1` | Count each player's deaths (shown next to the name, saved in `livemap/deaths.json`). |
 | `Objects` | `1` | Chests looted or not, locks, barriers and switches, and creatures near the players, read from the server's loaded world. |
 | `Log`, `LogDiagnostics` | `1` | Log file and periodic diagnostics. |

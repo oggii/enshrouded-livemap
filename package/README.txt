@@ -1,4 +1,4 @@
-Enshrouded Live Map 1.8.0
+Enshrouded Live Map 1.9.0
 =========================
 
 Server-side mod for Enshrouded dedicated servers. The server serves a live web map: players
@@ -45,6 +45,8 @@ Finds=1                ore veins and looted chests on the map
 Bases=1                the players' Flame Altars on the map
 Discovered=1           which places each player discovered and where they have been
                        (filter and fog of war in the marker panel)
+ExploreMode=0          1 = show only what your players found: dark fog, places once
+                       discovered, small markers within 50 m (needs Discovered=1)
 
 Everyone with the link sees all player positions and Flame Altars. Change Key= to lock old
 links out.

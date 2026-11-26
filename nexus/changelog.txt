@@ -1,4 +1,10 @@
-1.9.0 (not released yet)
+1.9.0
+- Explore mode: ExploreMode=1 in livemap.ini shows only what your players found. The fog of
+  war is always on and dark, places show once someone discovered them in the game, chests,
+  shrines and other small markers once someone was within 50 m, and the search and "Where do I
+  get it?" leave out the rest. Nobody can switch it off in the browser (the raw marker file
+  stays readable for those who go looking). Needs Discovered=1. Asked for on Nexus and in
+  GitHub issue #2.
 - Thanks to goakiller900, muhammadarifftaha and spruyt-labs-bot (GitHub issue #1): they kept
   the map running on the early November builds, and spruyt-labs-bot found that the entity
   table had moved, the fix that 1.8.0 also uses.
