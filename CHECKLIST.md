@@ -1,10 +1,10 @@
 # Live Map: Nexus promises of 25.11.2026
 
-**Wo wir stehen:** Test-Server läuft seit 26.11.2026 mit dem ExploreMode-Build und ExploreMode=1 (Log, /state und /near geprüft). Als Nächstes: Spieltest durch Oggi (Aufgabe 5, Schritt 4).
+**Wo wir stehen:** Spieltest auf dem Test-Server am 26.11.2026 bestanden (Karte schwarz bis auf Erkundetes, Truhe ab 50 m, Ort nach Entdeckung, near.json gespeichert). Als Nächstes: Release 1.9.0 (Aufgabe 6).
 
 ## Wartet auf dich
 
-- Spieltest auf dem Test-Server: Karte schwarz bis auf Erkundetes, Truhe ab 50 m, Stadt nach Entdeckung, Suche nach unentdeckter Stadt leer
+- OK für Release 1.9.0: Push, GitHub-Release, Nexus-Upload und Beschreibung, Antworten an entrigant, unholyhakisak und Issue #2
 
 ## 1. Spoiler-Schalter (ExploreMode=1), Version 1.9.0
 
@@ -16,7 +16,7 @@
 - [x] Test explored_test für 50 m
 - [x] Seite: Nebel deckend, Marker, Namen, Suche, Item-Quellen
 - [x] Seitencheck explore_check.mjs
-- [ ] Spieltest auf dem Test-Server
+- [x] Spieltest auf dem Test-Server
 - [ ] Release 1.9.0 (GitHub, Nexus nach OK) und Antwort an entrigant, unholyhakisak und GitHub-Issue #2
 - [ ] Live-Server nach OK
 
